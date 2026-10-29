@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+chrome_flow_profile/
+lotes/*
+!lotes/.gitkeep
+prontos/*
+!prontos/.gitkeep
+virais/*.mp4
+*.json.bak
+_zerum_local_state.json
