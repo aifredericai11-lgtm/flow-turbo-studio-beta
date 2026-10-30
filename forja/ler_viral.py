@@ -598,6 +598,8 @@ ROLETA_ROUPAS_F_LN: list[tuple[str, str]] = [
 
 ROLETA_ROUPAS_M_XZ: list[tuple[str, str]] = [
     ("scrubs cinza", "grey hospital scrubs with a stethoscope"),
+    ("físico atlético sem camisa", "shirtless athletic muscular build with defined chest and abs in dark athletic shorts"),
+    ("regata branca atlética", "a fitted white athletic tank top showing muscular arms and shoulders"),
     ("camisa xadrez", "a red plaid flannel shirt"),
     ("polo", "a navy polo shirt"),
     ("camiseta", "a plain white t-shirt"),
@@ -608,6 +610,10 @@ ROLETA_ROUPAS_M_XZ: list[tuple[str, str]] = [
 ]
 
 ROLETA_OBJETOS_AY: list[tuple[str, str]] = [
+    ("caixa de leite Oak Hill marrom", 'a terracotta-brown gable-top milk-carton style box labeled "OAK HILL BAKING SODA" on the foreground counter beside a glass bowl'),
+    ("caixa de leite Oak Valley azul", 'a blue-and-white gable-top milk-carton style box labeled "OAK VALLEY BAKING SODA" on the foreground counter beside a glass bowl'),
+    ("caixa Harbor Pines verde com tampa", 'a green-and-white carton box with a white plastic screw cap on top labeled "HARBOR PINES BAKING SODA" on the counter'),
+    ("caixa de leite laranja Oak Hill", 'an orange-and-white tall gable-top milk-carton spout box labeled "OAK HILL PURE BAKING SODA" on the counter beside {her}'),
     ("caixa na mão", "the orange box of baking soda held in {her} free hand the whole time"),
     ("caixa na mesa", "the orange box of baking soda and a small white dish of paste on the table beside {her}"),
     ("pires na mão", "a small white dish of white paste held in {her} hand"),
@@ -630,138 +636,138 @@ KEYWORDS_SUGERIDAS_ZERUM: list[str] = [
 ]
 
 PRODUTOS_001_GD: list[dict[str, Any]] = [
-    # 🔥 NOVO GERADOR 001 (ClickGo / 001affiliates — `gerador/novo/catalogo.json`)
+    # 🔥 NOVO GERADOR 001 (AffiliateNetwork / AffiliateNetwork — `gerador/novo/catalogo.json`)
     {
         "id": "sodatide",
-        "nome": "🔥 Sodatide (A Oferta Mais Quente · ClickGo)",
+        "nome": "🔥 Sodatide (A Oferta Mais Quente · AffiliateNetwork)",
         "nicho": "Perda de peso",
-        "cpa": "ClickGo Top #1",
+        "cpa": "AffiliateNetwork Top #1",
         "chiclete": "The $1 baking soda trick — same idea, except you don't mix anything and you don't taste anything",
         "objeto_viral": "orange baking soda box beside a glass of water and half a lemon + gesture of pushing the spoon away (no mixing, no taste; never show capsule or bottle)",
         "keywords": ["SODA", "YES", "TRICK", "NOISE"],
     },
     {
         "id": "meltpeak",
-        "nome": "MeltPeak (ClickGo)",
+        "nome": "MeltPeak (AffiliateNetwork)",
         "nicho": "Perda de peso",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the morning metabolic switch trick",
         "objeto_viral": "morning glass of water on kitchen counter",
         "keywords": ["YES", "TRICK", "SODA", "LINK"],
     },
     {
         "id": "sodapeak",
-        "nome": "Sodapeak (Saúde Masculina · ClickGo)",
+        "nome": "Sodapeak (Saúde Masculina · AffiliateNetwork)",
         "nicho": "Saúde masculina",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the baking soda trick for men over 50",
         "objeto_viral": "orange baking soda box + glass of water on kitchen counter",
         "keywords": ["SODA", "READY", "YES", "TRICK"],
     },
     {
         "id": "honeyboost",
-        "nome": "HoneyBoost (Saúde Masculina · ClickGo)",
+        "nome": "HoneyBoost (Saúde Masculina · AffiliateNetwork)",
         "nicho": "Saúde masculina",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the golden honey trick for men over 50",
         "objeto_viral": "spoon with golden honey on kitchen counter",
         "keywords": ["HONEY", "READY", "YES", "HOW"],
     },
     {
         "id": "jellyfil",
-        "nome": "Jellyfil (Saúde Masculina · ClickGo)",
+        "nome": "Jellyfil (Saúde Masculina · AffiliateNetwork)",
         "nicho": "Saúde masculina",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the 15-second red jelly trick",
         "objeto_viral": "spoon with red jelly on kitchen counter",
         "keywords": ["READY", "JELLY", "YES", "HOW"],
     },
     {
         "id": "vapofil",
-        "nome": "Vapofil (Saúde Masculina · ClickGo)",
+        "nome": "Vapofil (Saúde Masculina · AffiliateNetwork)",
         "nicho": "Saúde masculina",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the 10-second flow ritual for men",
         "objeto_viral": "glass of water on kitchen counter",
         "keywords": ["READY", "YES", "HOW", "LINK"],
     },
     {
         "id": "titanprime",
-        "nome": "TitanPrime (Saúde Masculina · ClickGo)",
+        "nome": "TitanPrime (Saúde Masculina · AffiliateNetwork)",
         "nicho": "Saúde masculina",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the morning stamina switch for men 50+",
         "objeto_viral": "morning mug / glass of water on counter",
         "keywords": ["READY", "YES", "HOW", "LINK"],
     },
     {
         "id": "sugarreset",
-        "nome": "Sugar Reset (Diabetes · ClickGo)",
+        "nome": "Sugar Reset (Diabetes · AffiliateNetwork)",
         "nicho": "Diabetes",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the morning glucose switch ritual",
         "objeto_viral": "finger prick monitor / glass of water in kitchen",
         "keywords": ["SUGAR", "YES", "INFO", "GUIDE"],
     },
     {
         "id": "bloodpril",
-        "nome": "Bloodpril (Pressão Arterial · ClickGo)",
+        "nome": "Bloodpril (Pressão Arterial · AffiliateNetwork)",
         "nicho": "Pressão arterial",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the vessel-relaxing morning trick",
         "objeto_viral": "home blood pressure cuff on kitchen table",
         "keywords": ["HEART", "BP", "YES", "INFO"],
     },
     {
         "id": "gelagen",
-        "nome": "Gelagen (Pele · ClickGo)",
+        "nome": "Gelagen (Pele · AffiliateNetwork)",
         "nicho": "Pele",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the kitchen gelatin skin-tightening trick",
         "objeto_viral": "spoon with clear/pink gelatin at bathroom or kitchen counter",
         "keywords": ["SKIN", "GLOW", "YES", "RECIPE"],
     },
     {
         "id": "breathizen",
-        "nome": "BreathiZen (Pulmão · ClickGo)",
+        "nome": "BreathiZen (Pulmão · AffiliateNetwork)",
         "nicho": "Pulmão",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the 30-second airway clearing ritual",
         "objeto_viral": "warm steaming mug on kitchen counter",
         "keywords": ["BREATH", "LUNGS", "YES", "INFO"],
     },
     {
         "id": "neuroschutz",
-        "nome": "NeuroSchutz (Neuropatia · ClickGo)",
+        "nome": "NeuroSchutz (Neuropatia · AffiliateNetwork)",
         "nicho": "Neuropatia",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the nerve-calming bedtime ritual for tingling feet",
         "objeto_viral": "socks beside bed / rubbing foot or ankle",
         "keywords": ["NERVE", "FEET", "YES", "INFO"],
     },
     {
         "id": "olivaro",
-        "nome": "Olivaro (Diabetes · ClickGo)",
+        "nome": "Olivaro (Diabetes · AffiliateNetwork)",
         "nicho": "Diabetes",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the olive leaf morning ritual",
         "objeto_viral": "tablespoon of extra virgin olive oil on counter",
         "keywords": ["OLIVE", "YES", "INFO", "LINK"],
     },
     {
         "id": "memohoney",
-        "nome": "MemoHoney (Memória · ClickGo)",
+        "nome": "MemoHoney (Memória · AffiliateNetwork)",
         "nicho": "Memória",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the golden honey memory trick",
         "objeto_viral": "wooden honey dipper with golden honey",
         "keywords": ["HONEY", "BRAIN", "YES", "INFO"],
     },
     {
         "id": "vapocept",
-        "nome": "Vapocept (Memória · ClickGo)",
+        "nome": "Vapocept (Memória · AffiliateNetwork)",
         "nicho": "Memória",
-        "cpa": "ClickGo",
+        "cpa": "AffiliateNetwork",
         "chiclete": "the 10-second brain fog clearing ritual",
         "objeto_viral": "keys and glasses on kitchen counter",
         "keywords": ["BRAIN", "MIND", "YES", "INFO"],
@@ -909,7 +915,7 @@ REGIOES_LINFATICAS_001: list[dict[str, str]] = [
 
 def carregar_ficha_ia_produto_001(produto_id: str, max_chars: int = 18000) -> str:
     """
-    Carrega a ficha oficial `briefs/<id>-ia.txt` extraída de `https://001.community/gerador/novo/catalogo.json`
+    Carrega a ficha oficial `briefs/<id>-ia.txt` extraída de `http://127.0.0.1:8505`
     e `gerador/catalogo.json` (incluindo 🔥 Sodatide com a tabela de transposição dos 95 virais do Baking Soda).
     """
     if not produto_id:
@@ -1075,7 +1081,7 @@ MICRO_VARIACOES_EMBALAGEM_001: list[dict[str, str]] = [
 
 def _interpretar_regras_diretor_vae(pedido: str, analise_15: dict[str, Any]) -> dict[str, Any]:
     """
-    Reproduz o compilador de intenção `c$` + `VAe` ("O QUE O MEMBRO ESCREVE É LEI") do `app.js` do Zerum:
+    Reproduz o compilador de intenção `c$` + `VAe` ("O QUE O MEMBRO ESCREVE É LEI") do `app.js` do FlowStudio:
     Extrai determinísticamente do pedido em linguagem natural:
     - `roupa_fixa_en` / `roupa_fixa_rotulo` (ex.: "todos usando a mesma roupa de enfermeira do viral")
     - `ritmo_edicao` (`"dinamico"` se pediu "edição dinâmica", "dinãmica", "take dinâmico", "punch-in", "jump cut")
@@ -1156,7 +1162,7 @@ def sortear_roleta_zerum(
     roupa_fixa_rotulo: str | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Reproduz exatamente a função `uN` + `vl(e, a, o, t, r)` do `app.js` do Zerum:
+    Reproduz exatamente a função `uN` + `vl(e, a, o, t, r)` do `app.js` do FlowStudio:
     - Gera todas as combinações `Tg (10 cenários) × lN/xz (8 roupas) × aY (6 objetos se baking soda, ou 1)`.
     - Se o membro ordenou `roupa_fixa_en` (ex.: "todos usando a mesma roupa de enfermeira do viral"),
       TRAVA a roupa em 100% dos vídeos do lote e gira apenas os 10 Cenários Americanos (`Tg`) × Posição do Objeto (`aY`)!
@@ -1249,7 +1255,7 @@ def parsear_avatares_variados_zerum(
     descricao_base_viral: str = "",
 ) -> list[dict[str, Any]]:
     """
-    Reproduz `DG(e, a, o)` + `Hae` + `m3` + `O2`/`E5` do Zerum (`app.js`):
+    Reproduz `DG(e, a, o)` + `Hae` + `m3` + `O2`/`E5` do FlowStudio (`app.js`):
     - Gera `qtd` avatares distintos respeitando o sexo, físico e roupa do viral (`sexo_padrao`, `roupa_fixa_en`, `descricao_base_viral`).
     """
     txt = (pedido or "").strip()
@@ -1341,7 +1347,7 @@ def parsear_avatares_variados_zerum(
             f"a {idade_var}-year-old {perf['etnia']} {papel_en}, {perf['cabelo']}{det_extra}"
         )
         desc_en = (
-            f"Candid front-facing iPhone photo (propped on the polished stone countertop looking slightly up) of a real {idade_var}-year-old {perf['etnia']} {papel_en}, "
+            f"Candid front-facing iPhone 15 Pro 0.5x ultra-wide (14mm-16mm subtle barrel fisheye perspective, slightly elevated 12-to-15-degree high-angle view looking slightly down at the full countertop surface with foreground looming) photo of a real {idade_var}-year-old {perf['etnia']} {papel_en}, "
             f"{perf['cabelo']}{det_extra}, wearing {roupa_padrao}, real unfiltered human skin with natural sheen/slight oiliness on forehead and nose, natural expression lines and visible pores, slightly blown-out overhead ceiling LED / window light in the lived-in background, and real specular light reflections on the polished stone countertop in foreground."
         )
         avatares_gerados.append(
@@ -1897,7 +1903,7 @@ def adaptar_viral_para_esteira_zerum(
     manter_personagem_original: bool = False,
 ) -> dict[str, Any]:
     """
-    Reproduz 100% os 2 Eixos do Zerum (`CAMINHO × VARIAÇÃO` + `Roleta` + `Elenco Variado` + `Keywords`):
+    Reproduz 100% os 2 Eixos do FlowStudio (`CAMINHO × VARIAÇÃO` + `Roleta` + `Elenco Variado` + `Keywords`):
     - Eixo 1 (`caminho`): `'igual'` (🎯 Igual ao viral) vs `'adaptar'` (🔄 Adaptar pro produto `produto_id` ou pedido).
     - Eixo 2 (`modo_variacao`):
       - `'tora'` / `'igual'` / `'nenhuma'`: 🪵 Sem variação (na tora)
@@ -2144,7 +2150,7 @@ def adaptar_viral_para_esteira_zerum(
     )
 
     prompt_modelar = (
-        "You are Flow Turbo Studio's `/ia/agente/intencao` + `/ia/modelar` Director Brain (Antigravity). "
+        "You are Flow Studio's `/ia/agente/intencao` + `/ia/modelar` Director Brain (Antigravity). "
         "Obey the Golden Rule (VAe): WHAT THE MEMBER WRITES IS LAW.\n\n"
         f"ANALYZED VIRAL (15 FIELDS, kie_hash={analise_15.get('kie_hash', '')[:12]}): {json.dumps(analise_15, ensure_ascii=False)}\n"
         f"AXIS 1 (CAMINHO): {caminho.upper()} — {info_produto}\n"

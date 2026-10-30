@@ -1,7 +1,7 @@
 """
-Compilador Determinístico de Realismo, Física, Voz (Hz), Animação, Juízes e Tesoura (Padrão Flow Turbo Studio).
+Compilador Determinístico de Realismo, Física, Voz (Hz), Animação, Juízes e Tesoura (Padrão Flow Studio).
 
-Extraído e portado 1:1 da interceptação AO VIVO do ciclo completo de geração no Zerum
+Extraído e portado 1:1 da interceptação AO VIVO do ciclo completo de geração no FlowStudio
 (`zerum-build:20261024T1400-estagios24-783315d`, lotes reais `L-PENSANTE-dde74994-6645959D` e `L-PENSANTE-2192d1a5-6645959D`):
 
 1. `QUADRO_PROMPT_18 + DUAL_REF_LOCK (quadroRefs18)`:
@@ -38,13 +38,33 @@ import re
 from typing import Any
 
 LEI_REALISMO_PESSOA = (
-    "UNPROCESSED RAW SMARTPHONE FOOTAGE (counter-propped iPhone 15 Pro 24mm f/1.78 camera, natural Rec.709 color science, zero beauty filter, zero AI plastic smoothing): "
-    "Vertical 9:16 candid phone framing, natural directional window daylight combined with slightly blown-out overhead recessed ceiling LED highlights, deep optical phone depth of field. "
-    "PHYSICALLY ACCURATE SURFACE & SPECULAR REFLECTIONS: the foreground polished stone/quartz/granite countertop surface displays real mirror-like specular light reflections of the overhead light and window daylight, "
-    "subtle inverted surface reflections of the tabletop containers, boxes and the speaker's forearms, plus realistic contact shadows and light caustics refracted onto the polished stone surface. "
+    "UNPROCESSED RAW SMARTPHONE FOOTAGE (iPhone 15 Pro 0.5x Ultra-Wide 14mm-16mm lens with subtle barrel fisheye perspective, slightly elevated 12-to-15-degree high-angle view looking slightly down at the full countertop/tabletop surface, natural Rec.709 color science, zero beauty filter, zero AI plastic smoothing, zero portrait bokeh): "
+    "Vertical 9:16 candid home/clinical phone framing where both the ceiling/upper cabinets and the entire foreground tabletop surface fit in frame with razor-sharp infinite deep focus from 30cm to the back wall. "
+    "FOREGROUND LOOMING & PHYSICALLY ACCURATE SURFACE REFLECTIONS: objects on the lower foreground counter/tabletop (baking soda carton, glass bowl, lemon, pitcher) appear 30% larger and closer to the bottom edge of the wide-angle lens, with real mirror-like specular light reflections and caustics on the polished stone/granite/steel surface. "
     "Authentic human skin subsurface scattering, visible pores, subtle natural T-zone sheen/oiliness on forehead, nose and skin, and a lived-in everyday American background (not overly sterile or artificial). "
     "ONE single photograph filling the whole frame — never a grid, collage, split screen, panels or multiple moments."
 )
+
+# Pool de embalagens "Curiosity Bait" & Anti-SSCD validadas nos campeões de 1.1M, 867K, 409K e 96K views
+POOL_EMBALAGENS_BAKING_SODA_CURIOSO: list[str] = [
+    'a terracotta-brown gable-top milk-carton style box labeled "OAK HILL BAKING SODA"',
+    'a blue-and-white gable-top milk-carton style box labeled "OAK VALLEY BAKING SODA"',
+    'a green-and-white carton box with a white plastic screw cap on top labeled "HARBOR PINES BAKING SODA"',
+    'an orange-and-white tall gable-top milk-carton spout box labeled "OAK HILL PURE BAKING SODA"',
+    'a classic orange Arm & Hammer Pure Baking Soda box',
+]
+
+
+def obter_embalagem_baking_soda_variacao(idx: int, fiel_original: bool = False) -> str:
+    """
+    Para as variações fiéis 1:1 ao original (fiel_original=True), mantém a caixa clássica da referência.
+    Para as demais variações do lote, rotaciona entre as embalagens 'Curiosity Bait' (formato caixa de leite / Oak Hill / Harbor Pines)
+    que zeram o hash visual SSCD da Meta e disparam comentários de curiosos ('Where did you get baking soda in a milk carton?!').
+    """
+    if fiel_original:
+        return 'an orange Arm & Hammer Baking Soda box'
+    return POOL_EMBALAGENS_BAKING_SODA_CURIOSO[idx % len(POOL_EMBALAGENS_BAKING_SODA_CURIOSO)]
+
 
 LEI_CONSISTENCIA_OBJETOS_CENA = (
     "STRICT SCENE-TO-SCENE PROP & TABLETOP CONTINUITY (ZERO DUPLICATE CONTAINERS): "
@@ -81,10 +101,10 @@ CRITICAL_SHOT_RULE_MAOS = (
 )
 
 CTA_LAW_QUADRO = (
-    "CTA LAW: in this closing shot the speaker stands behind the exact same polished countertop looking directly at the camera lens while delivering the call to action; "
-    "keep the exact same background, lighting, and tabletop props from Scene 2 without duplicating any glass or container."
+    "CTA LAW (INTIMATE EYE-TO-EYE CLOSING): in this closing shot the speaker stands slightly closer to the lens behind the exact same polished countertop, looking directly eye-to-eye into the camera lens after setting down the demonstration object; "
+    "keep the exact same background, lighting, and tabletop props from Scene 2 on the counter without duplicating any glass or container."
 )
-CTA_LAW_VIDEO = "The speaker gestures naturally toward the camera lens while speaking; all tabletop props stay consistent with the reference frame, with zero on-screen text or UI overlays generated in the video."
+CTA_LAW_VIDEO = "The speaker has set down the demonstration prop and gestures naturally at chest height toward the camera lens while speaking with intimate eye-to-eye conviction; all tabletop props stay consistent with the reference frame, with zero on-screen text or UI overlays generated in the video."
 
 PREPEND_REPARO_ACESSORIOS = (
     "CRITICAL OUTFIT & ACCESSORY REPAIR: The person MUST wear 100% the EXACT same shirt/scrub color, cap/headwear, and neck accessories (stethoscope) visible in Reference Image 1 (OVERRIDE Reference Image 2's clothing color and accessories)."
@@ -239,7 +259,7 @@ def compilar_quadro_refs_18(
     cena1_aprovada_media_id: str | None = None,
 ) -> list[str]:
     """
-    Implementa `quadroRefs18` capturado ao vivo no Zerum:
+    Implementa `quadroRefs18` capturado ao vivo no FlowStudio:
     - Cena 1 (`indice_cena == 0`): `[avatar_media_id]` (1 referência)
     - Cena 2+ (`indice_cena >= 1`): `[avatar_media_id, cena1_aprovada_media_id]` (Dupla referência:
       Foto 1 trava rosto/cabelo/idade; Foto 2 trava roupa/acessórios/cenário/luz da Cena 1 aprovada).
