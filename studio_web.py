@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-NOSSO ZERUM LOCAL · 001 (nosso_zerum.py)
+FLOW TURBO STUDIO (BETA) (nosso_zerum.py)
 =========================================
-Clone funcional completo e auto-hospedado do Zerum (https://001.community/zerum)
+Clone funcional completo e auto-hospedado do FlowStudio (http://127.0.0.1:8505)
 integrado diretamente ao nosso motor local de alta potência:
 - Compilador Físico-Óptico 1:1 (`forja/compilador_realismo_zerum.py`: D2, L2, z2, aM, oM, I2, cre, [VOICE] Hz Lock)
 - Verificador / Juiz de 3 Camadas (`forja/qa_clipe.py`: Voz Whisper >= 80%, Identidade Frame-1 >= 82%, Zero Freeze `freezedetect`)
 - Regravação Cirúrgica de Take Ruim (`forja/turbo_lote.py`: `retentar_apenas_takes` — refaz apenas o take reprovado e junta com NVENC)
-- As 6 Abas do Zerum (`DIRETOR`, `MANUAL`, `PRODUÇÃO`, `ANALISADOS`, `VÍDEOS`, `Avatares`)
+- As 6 Abas do FlowStudio (`DIRETOR`, `MANUAL`, `PRODUÇÃO`, `ANALISADOS`, `VÍDEOS`, `Avatares`)
 - Editor Pós-Produção Completo (`EDITOR · V1` / `✎ Editar vídeo · cortar · regravar · trocar fala`) com Timeline Multi-Track (`VÍDEO`, `LEGENDA`, `ÁUDIO`), 4 estilos de legenda (`legenda`, `karaokê`, `comando`, `cartaz`), blocos (`1`, `3`, `5 palavras`), 6 fontes (`Poppins Bold`, `Anton`, `Bebas Neue`, `Archivo Black`, `Lilita One`, `Bangers`) e renderização GPU RTX 4050 (`h264_nvenc`).
 
 Como iniciar:
@@ -46,6 +46,7 @@ from forja.compilador_realismo_zerum import (
     compilar_prompt_animacao_cena,
     compilar_quadro_refs_18,
     construir_reparo_cirurgico_juiz_visao,
+    obter_embalagem_baking_soda_variacao,
     ASS_STYLESHEET_ZERUM_11,
 )
 
@@ -139,7 +140,13 @@ def compilar_prompt_cena_veo31(
             "CRITICAL OBJECT PERMANENCE & CONTINUITY LOCK: No camera cut, no jump cut, no morphing. Every single object, box, and container on the countertop/table in the reference image (especially the bright orange Arm & Hammer Baking Soda box, glass, pitcher, bowl, and lemon) MUST remain 100% stationary and permanently visible on the surface from 0.0s to the very end of the clip — NEVER make any box or prop vanish, dissolve, or disappear when hands move. Strictly NO on-screen text, NO subtitles, and NO UI overlays."
         )
 
-    roupa_segura = re.sub(r"\b(?:shirtless|bare[-\s]+chested|bare\s+torso)\b", "athletic build", str(persona.get("outfit") or persona.get("clothes") or ""), flags=re.I)
+    retry_att = int(scene.get("retry_attempt") or 0)
+    roupa_raw = str(persona.get("outfit") or persona.get("clothes") or "")
+    roupa_segura = (
+        re.sub(r"\b(?:shirtless|bare[-\s]+chested|bare\s+torso)\b", "athletic build", roupa_raw, flags=re.I)
+        if retry_att >= 2
+        else roupa_raw
+    )
     return compilar_prompt_animacao_cena(
         indice_cena=1 if Continuity else 0,
         acao_visual=acao_segura,
@@ -223,7 +230,7 @@ _carregar_estado_persistente()
 
 def _carregar_dados_zerum() -> dict[str, Any]:
     """
-    Unifica os dados reais extraídos do IndexedDB do Zerum (50 Avatares, Virais Analisados, Lotes)
+    Unifica os dados reais extraídos do IndexedDB do FlowStudio (50 Avatares, Virais Analisados, Lotes)
     com os nossos vídeos locais verificados em `prontos/` e avatares em `avatares/`.
     """
     personas: list[dict[str, Any]] = []
@@ -262,7 +269,7 @@ def _carregar_dados_zerum() -> dict[str, Any]:
     ]
     personas.extend(avatares_locais)
 
-    # 2. Carregar os 50 avatares do IndexedDB do Zerum (zr_memoria_completa.json)
+    # 2. Carregar os 50 avatares do IndexedDB do FlowStudio (zr_memoria_completa.json)
     if ZR_MEMORIA_PATH.exists():
         try:
             mem = json.loads(ZR_MEMORIA_PATH.read_text(encoding="utf-8"))
@@ -274,7 +281,7 @@ def _carregar_dados_zerum() -> dict[str, Any]:
                 personas.append(
                     {
                         "id": p.get("id") or f"zr-persona-{idx+1}",
-                        "name": p.get("name") or f"Avatar Zerum #{idx+1} ({p.get('sex','f').upper()} · {p.get('ageRange','35-45')})",
+                        "name": p.get("name") or f"Avatar FlowStudio #{idx+1} ({p.get('sex','f').upper()} · {p.get('ageRange','35-45')})",
                         "sex": p.get("sex", "f"),
                         "ageRange": p.get("ageRange", "35-45"),
                         "ethnicity": p.get("ethnicity", ""),
@@ -284,13 +291,13 @@ def _carregar_dados_zerum() -> dict[str, Any]:
                         "imageUrl": img_url,
                         "referenceImageId": p.get("referenceImageId", ""),
                         "voiceLock": compilar_bloco_voz_travada(p),
-                        "origem": "Flow Turbo Studio IndexedDB",
+                        "origem": "Flow Studio IndexedDB",
                     }
                 )
         except Exception as e:
             print(f"[!] Aviso lendo ZR_MEMORIA_PATH: {e}")
 
-    # 3. Carregar Virais Analisados Locais (mais recente no topo!) + Zerum (zerum_virais_analises.json)
+    # 3. Carregar Virais Analisados Locais (mais recente no topo!) + FlowStudio (zerum_virais_analises.json)
     if CACHE_KIE_PATH.exists():
         try:
             cache_k = json.loads(CACHE_KIE_PATH.read_text(encoding="utf-8"))
@@ -324,7 +331,7 @@ def _carregar_dados_zerum() -> dict[str, Any]:
                             "thumb": v.get("thumb", ""),
                             "estado": v.get("estado", "pronto"),
                             "analise": v.get("analise", {}),
-                            "origem": "Flow Turbo Studio (Kie Cache)",
+                            "origem": "Flow Studio (Kie Cache)",
                         }
                     )
         except Exception as e:
@@ -498,7 +505,7 @@ def _carregar_dados_zerum() -> dict[str, Any]:
                 }
             )
 
-    # 5. Lotes de produção (combinando Hard Test Ao Vivo + nosso histórico + Zerum IndexedDB)
+    # 5. Lotes de produção (combinando Hard Test Ao Vivo + nosso histórico + FlowStudio IndexedDB)
     lotes.append(
         {
             "id": "L-PENSANTE-dde74994-6645959D",
@@ -595,7 +602,7 @@ def _carregar_dados_zerum() -> dict[str, Any]:
 def _renderizar_editor_legenda_nvenc(payload: dict[str, Any]) -> dict[str, Any]:
     """
     Renderiza DE VERDADE o vídeo editado no EDITOR · V1 com GPU NVIDIA RTX 4050 (h264_nvenc):
-    - Gera o arquivo `.ass` real com os 11 estilos do Zerum (`Leg`, `Uma`, `Kar`, `Cmd`, `Board`, `Cta`, `Seta`)
+    - Gera o arquivo `.ass` real com os 11 estilos do FlowStudio (`Leg`, `Uma`, `Kar`, `Cmd`, `Board`, `Cta`, `Seta`)
       via `gerar_script_ass_zerum_11`.
     - Queima a legenda + botão pulsante `COMMENT YES` + seta animada via FFmpeg `h264_nvenc` em ~1.5s!
     """
@@ -689,11 +696,11 @@ def _montar_video_final_nvenc(
     titulo_id: str,
     estilo_legenda: str = "karaoke",
     palavra_cta: str = "YES",
-    edicao_dinamica: bool = False,
+    edicao_dinamica: bool = True,
 ) -> Path:
     """
     Concatena os takes aparados pela Tesoura e queima a legenda 11-estilos + CTA via RTX 4050 h264_nvenc.
-    - Se `edicao_dinamica=True`, aplica Punch-In dinâmico (zoom 1.10x centralizado) nos takes pares (Cena 2) para jump-cut de retenção.
+    - Por padrão (`edicao_dinamica=True`), aplica progressão de escala humana (Cena 1 em 1.0x -> Cena 2 com Punch-In 1.10x -> Cena 3 com enquadramento íntimo de CTA) + presença de áudio (-14.2 dB LUFS).
     - Se `estilo_legenda="apenas_cta"` (sem legenda nas falas, apenas botão CTA no final), omite legendas faladas e exibe só o botão CTA!
     """
     clipes_para_concat: list[Path] = []
@@ -834,6 +841,8 @@ def _montar_video_final_nvenc(
             str(joined_mp4),
             "-vf",
             f"ass={ass_file.name}:fontsdir={fonts_rel}",
+            "-af",
+            "volume=2.2dB,alimiter=limit=0.96",
             "-c:v",
             "h264_nvenc",
             "-preset",
@@ -841,7 +850,9 @@ def _montar_video_final_nvenc(
             "-b:v",
             "6M",
             "-c:a",
-            "copy",
+            "aac",
+            "-b:a",
+            "192k",
             str(final_mp4),
         ],
         cwd=str(pasta_job),
@@ -883,13 +894,27 @@ def _executar_job_producao_flow(job_id: str, payload: dict[str, Any]) -> None:
         edicao_dinamica = bool(
             payload.get("edicaoDinamica")
             if payload.get("edicaoDinamica") is not None
-            else regras_vae.get("edicao_dinamica", False)
+            else regras_vae.get("edicao_dinamica", True)
         )
         palavra_cta = str(
             payload.get("palavraCta")
             or lote_adaptado.get("palavraCta")
             or "YES"
         ).upper()
+
+        m_idx_var = re.search(r"(\d+)$", str(job_id))
+        idx_variacao = int(payload.get("idxVariacao") if payload.get("idxVariacao") is not None else ((int(m_idx_var.group(1)) - 1) if m_idx_var else 0))
+        fiel_original = bool(
+            payload.get("fielOriginal")
+            if payload.get("fielOriginal") is not None
+            else (idx_variacao < 2 and str(payload.get("modoVariacao") or "tora") in ("tora", "igual"))
+        )
+        caixa_soda_var = obter_embalagem_baking_soda_variacao(idx_variacao, fiel_original=fiel_original)
+        perspectiva_fisheye_en = (
+            "OPTICAL PERSPECTIVE (iPhone 15 Pro 0.5x Ultra-Wide 14mm-16mm subtle barrel fisheye lens at a slightly elevated 12-to-15-degree high-angle view looking slightly down at the full countertop surface with foreground looming so tabletop props appear 30% closer and larger in crisp deep focus). "
+            if not fiel_original
+            else ""
+        )
 
         caminho_lote = str(lote_adaptado.get("caminho") or payload.get("caminho") or "igual")
         modo_var_lote = str(lote_adaptado.get("modoVariacao") or payload.get("modoVariacao") or "tora")
@@ -1031,9 +1056,17 @@ def _executar_job_producao_flow(job_id: str, payload: dict[str, Any]) -> None:
                 persona.get("physicalDescription")
                 or f"a different real 48-year-old American {ator_en}"
             ).strip()
+            if not fiel_original and "baking soda" in keep_s1.lower():
+                keep_s1 = re.sub(
+                    r"\b(?:bright\s+orange\s+)?Arm\s*&\s*Hammer\s+(?:Pure\s+)?Baking\s+Soda\s+box\b",
+                    caixa_soda_var,
+                    keep_s1,
+                    flags=re.I,
+                )
             return (
                 "No text in the image. Completely remove any captions, subtitles, yellow pill buttons/banners, or corner watermarks/icons if present, restoring the clean surface underneath. "
-                f"Edit this reference photo from the viral video: keep 100% of the EXACT same background, environment, lighting, camera angle, countertop/furniture, and physical props ({keep_s1}). "
+                f"{perspectiva_fisheye_en}"
+                f"Edit this reference photo from the viral video: keep 100% of the EXACT same background, environment, lighting, countertop/furniture, and physical props ({keep_s1}). "
                 f"CRITICAL IDENTITY SWAP: Completely remove the original presenter ({rem_orig}) and replace their head, face, skin tone on all visible skin, hair, and eyewear with a 100% different new {ator_en} ({desc_av}), "
                 f"keeping the exact same body build, posture, hands, and attire/presentation ({keep_attire})."
             )
@@ -1048,6 +1081,13 @@ def _executar_job_producao_flow(job_id: str, payload: dict[str, Any]) -> None:
                 ).strip(),
                 str(cn.get("dialogue") or ""),
             )
+            if not fiel_original and "baking soda" in keep_sn.lower():
+                keep_sn = re.sub(
+                    r"\b(?:bright\s+orange\s+)?Arm\s*&\s*Hammer\s+(?:Pure\s+)?Baking\s+Soda\s+box\b",
+                    caixa_soda_var,
+                    keep_sn,
+                    flags=re.I,
+                )
             keep_attire_raw = str(
                 plano_fisico.get("presenter_keep_attire_and_body")
                 or roupa_lock
@@ -1369,7 +1409,80 @@ def _executar_job_producao_flow(job_id: str, payload: dict[str, Any]) -> None:
             sub_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(final_mp4, sub_dir / final_mp4.name)
 
+        formato_hub = str(payload.get("formatoHub") or "").strip().upper()
+        if not formato_hub:
+            texto_busca = f"{job_id} {pasta_saida_sub} {json.dumps(cenas_in, ensure_ascii=False)}".lower()
+            if "virilha" in texto_busca or "groin" in texto_busca:
+                formato_hub = "F08"
+            elif "pescoco" in texto_busca or "neck" in texto_busca:
+                formato_hub = "F02"
+            elif "orelha" in texto_busca or "negao" in texto_busca or "behind your ear" in texto_busca:
+                formato_hub = "F06"
+            elif "coxa" in texto_busca or "perna" in texto_busca or "thigh" in texto_busca:
+                formato_hub = "F03"
+            elif "suvaco" in texto_busca or "axila" in texto_busca or "armpit" in texto_busca:
+                formato_hub = "F05"
+            elif "umbigo" in texto_busca or "belly button" in texto_busca:
+                formato_hub = "F01"
+            else:
+                formato_hub = "F08"
+
+        MAPA_PASTAS_DRIVE_HUB = {
+            1: "F01 - UMBIGO",
+            2: "F02 - PESCOÇO",
+            3: "F03 - PERNA",
+            4: "F04 - BARRIGA MANEQUIM",
+            5: "F05 - SUVACO",
+            6: "F06 - ATRÁS DA ORELHA",
+            7: "F07 - MANEQUIM SUVACO",
+            8: "F08 - VIRILHA MANEQUIM (GROIN)",
+            9: "F09 - RECEITA COZINHA",
+            10: "F10 - ALERTA NAO BEBA (91K)",
+            11: "F11 - JALECO XL TO S (59K)",
+            12: "F12 - HIBRIDO HOOK + TOPICO",
+            13: "F13 - GLP1 CASEIRO + DMS (AULA 21/10 #1)",
+            14: "F14 - 1 COLHER GLP1 BARRIGA (AULA 21/10 #2)",
+            15: "F15 - MOUNJARO VAI PRO INFERNO (AULA 21/10 #3)",
+        }
+
         hub_status_txt = ""
+        if final_mp4.exists():
+            fmt_id_num = int(re.sub(r"\D+", "", formato_hub) or "8")
+            nome_pasta_fmt = MAPA_PASTAS_DRIVE_HUB.get(fmt_id_num, f"F{fmt_id_num:02d} - GERAL")
+            # 1) Sempre copiar para o Google Drive Geral da Operação Hub de Orgânico (H:\Meu Drive\HUB CENTRAL OP ORGÂNICO)
+            try:
+                drive_root = Path(r"H:\Meu Drive\HUB CENTRAL OP ORGÂNICO")
+                if drive_root.parent.exists():
+                    dest_drive_fmt = drive_root / nome_pasta_fmt / "LOTE 01"
+                    dest_drive_fmt.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(final_mp4, dest_drive_fmt / final_mp4.name)
+                    if pasta_saida_sub:
+                        dest_drive_lote = drive_root / "LOTES_FORJADOS" / pasta_saida_sub
+                        dest_drive_lote.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(final_mp4, dest_drive_lote / final_mp4.name)
+                    hub_status_txt += f" · ☁️ Drive Hub ({nome_pasta_fmt})"
+            except Exception as e_drv:
+                hub_status_txt += f" · ⚠️ Drive ({e_drv})"
+
+            # 2) Sempre enviar via HTTP para o Servidor Hub Central de Orgânico na LAN (:3000)
+            try:
+                import urllib.request
+                upload_url = f"http://192.168.100.126:3000/api/formats/{fmt_id_num}/upload-raw"
+                req_hub = urllib.request.Request(
+                    upload_url,
+                    data=final_mp4.read_bytes(),
+                    headers={
+                        "Content-Type": "video/mp4",
+                        "x-filename": urllib.parse.quote(final_mp4.name),
+                        "x-subfolder": "LOTE 01",
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(req_hub, timeout=45) as r_hub:
+                    r_hub.read()
+                hub_status_txt += f" · 📤 LAN Hub ({formato_hub} -> LOTE 01)"
+            except Exception as e_hub:
+                hub_status_txt += f" · ⚠️ Aviso LAN ({formato_hub}): {e_hub}"
 
         job["status"] = "concluido"
         job["videoFinalUrl"] = "/media/root/" + final_mp4.relative_to(ROOT_DIR).as_posix()
@@ -1413,7 +1526,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FLOW TURBO STUDIO · BETA Local (Motor Próprio RTX 4050 + Compilador & Juiz 3 Camadas)</title>
+  <title>ZERUM · 001 Local (Motor Próprio RTX 4050 + Compilador & Juiz 3 Camadas)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bangers&family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Lilita+One&family=Poppins:wght@600;700;800;900&display=swap" rel="stylesheet">
@@ -1490,7 +1603,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
     }
     .btn-green:hover { background: rgba(16, 185, 129, 0.24); }
 
-    /* Top Navigation Bar (Flow Turbo Studio exact layout) */
+    /* Top Navigation Bar (Flow Studio exact layout) */
     .topbar {
       height: 52px;
       background: var(--bg-surface);
@@ -1714,7 +1827,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
       flex-shrink: 0;
     }
 
-    /* EDITOR · V1 Layout (Exact Zerum Timeline & Subtitle Studio) */
+    /* EDITOR · V1 Layout (Exact FlowStudio Timeline & Subtitle Studio) */
     .editor-body {
       flex: 1;
       display: flex;
@@ -1871,11 +1984,11 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
 </head>
 <body>
 
-  <!-- TOPBAR ZERUM 001 -->
+  <!-- TOPBAR Flow Studio -->
   <header class="topbar">
     <div class="brand-group">
       <div class="brand-logo">
-        <span>⚡ FLOW TURBO STUDIO · BETA LOCAL</span>
+        <span>⚡ ZERUM · 001 LOCAL</span>
       </div>
       <div class="status-pill" title="Compilador Físico D2/L2/z2 + Juiz 3 Camadas Ativos">
         <span class="status-dot"></span>
@@ -1883,7 +1996,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
       </div>
     </div>
 
-    <nav class="nav-tabs" role="tablist" aria-label="Navegação Principal Zerum">
+    <nav class="nav-tabs" role="tablist" aria-label="Navegação Principal FlowStudio">
       <button class="nav-tab" role="tab" aria-selected="true" onclick="switchTab('DIRETOR')">DIRETOR</button>
       <button class="nav-tab" role="tab" aria-selected="false" onclick="switchTab('MANUAL')">MANUAL</button>
       <button class="nav-tab" role="tab" aria-selected="false" onclick="switchTab('PRODUCAO')">PRODUÇÃO <span id="badge-lotes" class="badge-count">1</span></button>
@@ -1914,7 +2027,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
           <div style="font-size:11px;color:var(--text-secondary);">Viral 4.1M views · 3 cenas</div>
         </div>
         <div style="margin-top:auto;border-top:1px solid var(--border-subtle);padding-top:10px;font-size:11px;color:var(--text-secondary);">
-          <div><strong>Motor Físico Zerum:</strong></div>
+          <div><strong>Motor Físico FlowStudio:</strong></div>
           <div>• Lente 24mm Frontal Smartphone</div>
           <div>• Trava Acústica [VOICE] Hz</div>
           <div>• Juiz Whisper + Frame-1 + Freeze</div>
@@ -1925,7 +2038,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
         <div class="diretor-scroll">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
             <div>
-              <h1 style="font-size:18px;font-weight:800;">Diretor Zerum · Esteira Completa (Subir Viral → Ler 15 Campos → Adaptar → Produzir)</h1>
+              <h1 style="font-size:18px;font-weight:800;">Diretor FlowStudio · Esteira Completa (Subir Viral → Ler 15 Campos → Adaptar → Produzir)</h1>
               <p style="color:var(--text-secondary);font-size:12px;">Suba um vídeo viral `.mp4` (ou escolha da pasta `virais/`), leia os 15 campos com Whisper GPU + Gemini Vision, adapte na esteira e produza com Verificador.</p>
             </div>
             <div style="display:flex;gap:8px;">
@@ -2000,9 +2113,9 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
                 </select>
               </div>
               <div>
-                <label class="section-title" style="display:block;">Produto 001 (Novo Gerador ClickGo + Antigo H&W)</label>
+                <label class="section-title" style="display:block;">Produto 001 (Novo Gerador AffiliateNetwork + Antigo H&W)</label>
                 <select id="viral-produto-id" onchange="adaptarViralNaEsteira()">
-                  <optgroup label="🔥 NOVO GERADOR 001 (ClickGo / 001affiliates)">
+                  <optgroup label="🔥 NOVO GERADOR 001 (AffiliateNetwork / AffiliateNetwork)">
                     <option value="sodatide" selected>🔥 Sodatide (A Oferta Mais Quente · Perda de peso)</option>
                     <option value="sodapeak">Sodapeak (Saúde masculina)</option>
                     <option value="honeyboost">HoneyBoost (Saúde masculina)</option>
@@ -2047,7 +2160,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
               </div>
             </div>
 
-            <!-- Keywords Sugeridas (10 oficiais do Zerum) + Ordem Livre ao Diretor (Antigravity) -->
+            <!-- Keywords Sugeridas (10 oficiais do FlowStudio) + Ordem Livre ao Diretor (Antigravity) -->
             <div style="display:grid;grid-template-columns:1.1fr 2fr auto;gap:10px;align-items:end;">
               <div>
                 <label class="section-title" style="display:block;">Keyword CTA (`LINK · YES · ME · INFO · WANT · READY · SEND · HOW · GUIDE · PRICE`)</label>
@@ -2149,7 +2262,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
       </div>
     </section>
 
-    <!-- ABA 2: MANUAL (4 Etapas do Zerum) -->
+    <!-- ABA 2: MANUAL (4 Etapas do FlowStudio) -->
     <section id="tab-MANUAL" class="tab-pane" role="tabpanel">
       <div style="max-width:1050px;margin:0 auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -2183,7 +2296,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
       </div>
     </section>
 
-    <!-- ABA 4: ANALISADOS (Virais Extraídos do Zerum + Locais) -->
+    <!-- ABA 4: ANALISADOS (Virais Extraídos do FlowStudio + Locais) -->
     <section id="tab-ANALISADOS" class="tab-pane" role="tabpanel">
       <div style="max-width:1240px;margin:0 auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
@@ -2212,7 +2325,7 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
   </main>
 
   <!-- MODAL 1: EDITOR · V1 (✎ Editar vídeo · cortar · regravar · trocar fala) -->
-  <div id="modal-editor" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editor de Vídeo Zerum V1">
+  <div id="modal-editor" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Editor de Vídeo FlowStudio V1">
     <div class="modal-window">
       <header class="modal-header">
         <div style="display:flex;align-items:center;gap:12px;">
@@ -2334,10 +2447,10 @@ HTML_NOSSO_ZERUM = r"""<!DOCTYPE html>
   </div>
 
   <!-- MODAL 2: AVATARES (52 Personas com Voice Lock Hz e Preenchimento Manual) -->
-  <div id="modal-avatares" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Galeria de Avatares Zerum">
+  <div id="modal-avatares" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Galeria de Avatares FlowStudio">
     <div class="modal-window" style="height:88vh;">
       <header class="modal-header">
-        <div style="font-weight:800;font-size:14px;">👤 AVATARES & PERSONAS (50 do Zerum IndexedDB + Avatares Locais)</div>
+        <div style="font-weight:800;font-size:14px;">👤 AVATARES & PERSONAS (50 do FlowStudio IndexedDB + Avatares Locais)</div>
         <div style="display:flex;gap:8px;">
           <button onclick="closeModal('modal-avatares')">✕ Fechar</button>
         </div>
@@ -3084,7 +3197,7 @@ class NossoZerumHandler(BaseHTTPRequestHandler):
             rel = urllib.parse.unquote(path[len("/media/"):])
             if rel.startswith("artifact/"):
                 fname = rel[len("artifact/"):]
-                fpath = Path(r"C:\Users\User\.gemini\antigravity\brain\8ae8cf2b-5a24-4020-9cf1-2816b2435e39\.user_uploaded") / fname
+                fpath = Path(r"C:\Users\JeffP\.gemini\antigravity\brain\8ae8cf2b-5a24-4020-9cf1-2816b2435e39\.user_uploaded") / fname
             elif rel.startswith("root/"):
                 fpath = ROOT_DIR / rel[len("root/"):]
             else:
@@ -3404,7 +3517,7 @@ class NossoZerumHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", PORTA_ZERUM), NossoZerumHandler)
-    print(f"[+] NOSSO ZERUM LOCAL · 001 rodando em http://127.0.0.1:{PORTA_ZERUM}")
+    print(f"[+] FLOW TURBO STUDIO (BETA) rodando em http://127.0.0.1:{PORTA_ZERUM}")
     server.serve_forever()
 
 
