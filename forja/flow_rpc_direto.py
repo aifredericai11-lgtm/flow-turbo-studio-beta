@@ -29,7 +29,7 @@ CDP_URL_PADRAO = "http://127.0.0.1:9225"
 _CDP_RPC_LOCK = threading.Lock()
 
 
-EXT_DIR = Path(__file__).resolve().parent.parent / "extensao_flow_rpc" / "dump_autenticado" / "extensao_zerum_instalada"
+EXT_DIR = Path(__file__).resolve().parent.parent / "extensao_flow_rpc"
 
 
 def _garantir_core_injetado(pg: Any) -> None:
