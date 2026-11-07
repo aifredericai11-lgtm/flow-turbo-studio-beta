@@ -29,20 +29,23 @@ CDP_URL_PADRAO = "http://127.0.0.1:9225"
 _CDP_RPC_LOCK = threading.Lock()
 
 
-EXT_DIR = Path(__file__).resolve().parent.parent / "zerum_re" / "dump_autenticado" / "extensao_zerum_instalada"
+EXT_DIR = Path(__file__).resolve().parent.parent / "extensao_flow_rpc" / "dump_autenticado" / "extensao_zerum_instalada"
 
 
 def _garantir_core_injetado(pg: Any) -> None:
-    estado = pg.evaluate(
-        """() => {
-            const c = window.__zerumCandidateCoreV1;
-            if (!c) return { ok: false };
-            const info = c.info();
-            return { ok: !!(info && info.armadilha && info.wiz), info };
-        }"""
-    )
-    if estado and estado.get("ok"):
-        return
+    try:
+        estado = pg.evaluate(
+            """() => {
+                const c = window.__zerumCandidateCoreV1;
+                if (!c) return { ok: false };
+                const info = c.info();
+                return { ok: !!(info && info.armadilha && info.wiz), info };
+            }"""
+        )
+        if estado and estado.get("ok"):
+            return
+    except Exception:
+        pass
 
     trap_js = EXT_DIR / "trap-main.js"
     core_js = EXT_DIR / "flow-core.js"
@@ -53,7 +56,7 @@ def _garantir_core_injetado(pg: Any) -> None:
         cdp.send("Page.enable")
         cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": trap_code + "\n;\n" + core_code})
         pg.reload(wait_until="domcontentloaded")
-        pg.wait_for_timeout(3500)
+        pg.wait_for_timeout(4000)
     except Exception:
         if trap_code:
             pg.evaluate(trap_code)
@@ -62,9 +65,67 @@ def _garantir_core_injetado(pg: Any) -> None:
 
 
 _ULTIMA_LIMPEZA_OMNIBOX = 0.0
+_ULTIMO_RELOAD_ANTI_TRAFFIC = 0.0
+_VID_DISPATCH_LOCK = threading.Lock()
+_ULTIMO_DISPATCH_TS = 0.0
 _WS_CONCURRENCY_SEM = threading.BoundedSemaphore(14)
 _WS_URL_CACHE: dict[str, tuple[float, str]] = {}
 _WS_CACHE_LOCK = threading.Lock()
+
+
+def _cadenciar_disparo_nao_bloqueante(intervalo_s: float = 0.35) -> None:
+    """Espaça o início dos disparos em `intervalo_s` sem segurar o lock durante a execução WebSocket."""
+    global _ULTIMO_DISPATCH_TS
+    with _VID_DISPATCH_LOCK:
+        agora = time.time()
+        espera = (_ULTIMO_DISPATCH_TS + intervalo_s) - agora
+        if espera > 0:
+            time.sleep(espera)
+        _ULTIMO_DISPATCH_TS = time.time()
+
+
+def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO) -> bool:
+    global _ULTIMO_RELOAD_ANTI_TRAFFIC
+    with _VID_DISPATCH_LOCK:
+        with _CDP_RPC_LOCK:
+            agora = time.time()
+            if agora - _ULTIMO_RELOAD_ANTI_TRAFFIC < 45.0:
+                time.sleep(4.0)
+                return True
+            _ULTIMO_RELOAD_ANTI_TRAFFIC = agora
+            try:
+                trap_js = EXT_DIR / "trap-main.js"
+                core_js = EXT_DIR / "flow-core.js"
+                trap_code = trap_js.read_text(encoding="utf-8") if trap_js.exists() else ""
+                core_code = core_js.read_text(encoding="utf-8") if core_js.exists() else ""
+                with sync_playwright() as p:
+                    browser = p.chromium.connect_over_cdp(cdp_url, timeout=20000)
+                    ctx = browser.contexts[0]
+                    for pg in ctx.pages:
+                        if "labs.google" in pg.url or "flow" in pg.url or "/project/" in pg.url:
+                            try:
+                                cdp = ctx.new_cdp_session(pg)
+                                cdp.send("Page.enable")
+                                cdp.send("Page.addScriptToEvaluateOnNewDocument", {"source": trap_code + "\n;\n" + core_code})
+                            except Exception:
+                                pass
+                            pg.reload(wait_until="domcontentloaded")
+                            pg.wait_for_timeout(6000)
+                            # Simula micro-movimento humano de mouse na aba para aquecer o score reCAPTCHA Enterprise v3 (0.9)
+                            try:
+                                pg.mouse.move(420, 360)
+                                pg.wait_for_timeout(300)
+                                pg.mouse.move(610, 480)
+                            except Exception:
+                                pass
+                            break
+                with _WS_CACHE_LOCK:
+                    _WS_URL_CACHE.pop(cdp_url, None)
+                print("  [🔄 FLOW AUTO-RELOAD] Aba recarregada e token reCAPTCHA renovado com sucesso!", flush=True)
+                return True
+            except Exception as e:
+                print(f"  [!] Aviso no recarregar_aba_flow_anti_traffic: {e}", flush=True)
+                return False
 
 
 def _obter_ws_url_flow_cached(cdp_url: str = CDP_URL_PADRAO, force_refresh: bool = False) -> str:
@@ -78,7 +139,7 @@ def _obter_ws_url_flow_cached(cdp_url: str = CDP_URL_PADRAO, force_refresh: bool
         tabs = json.loads(_ur.urlopen(f"{cdp_url.rstrip('/')}/json/list", timeout=3.0).read())
         for t in tabs:
             u = str(t.get("url") or "")
-            if ("flow.google.com/project/" in u or "/project/" in u) and t.get("webSocketDebuggerUrl"):
+            if t.get("type") == "page" and ("flow.google.com/project/" in u or "labs.google" in u and "/project/" in u) and t.get("webSocketDebuggerUrl"):
                 ws_u = str(t["webSocketDebuggerUrl"])
                 _WS_URL_CACHE[cdp_url] = (agora, ws_u)
                 return ws_u
@@ -90,7 +151,7 @@ def _obter_ws_url_flow_cached(cdp_url: str = CDP_URL_PADRAO, force_refresh: bool
         tabs = json.loads(_ur.urlopen(f"{cdp_url.rstrip('/')}/json/list", timeout=3.0).read())
         for t in tabs:
             u = str(t.get("url") or "")
-            if ("flow.google.com/project/" in u or "/project/" in u) and t.get("webSocketDebuggerUrl"):
+            if t.get("type") == "page" and ("flow.google.com/project/" in u or "labs.google" in u and "/project/" in u) and t.get("webSocketDebuggerUrl"):
                 ws_u = str(t["webSocketDebuggerUrl"])
                 _WS_URL_CACHE[cdp_url] = (time.time(), ws_u)
                 return ws_u
@@ -180,16 +241,27 @@ def _obter_aba_flow(playwright_instance: Any, cdp_url: str = CDP_URL_PADRAO):
     browser = playwright_instance.chromium.connect_over_cdp(cdp_url, timeout=25000)
     ctx = browser.contexts[0]
     for pg in ctx.pages:
-        if "flow.google.com/project/" in pg.url or "/project/" in pg.url:
+        if "flow.google.com/project/" in pg.url or ("labs.google" in pg.url and "/project/" in pg.url):
             _garantir_core_injetado(pg)
             return browser, pg
     for pg in ctx.pages:
-        if "flow.google.com" in pg.url:
-            pg.goto("https://flow.google.com/project/2d5e1b0f-1b4d-4b4a-ade7-18752f39e239", wait_until="domcontentloaded")
-            time.sleep(2.5)
+        if "flow.google.com" in pg.url or "labs.google" in pg.url:
+            pg.goto("https://flow.google.com/project/cff15a39-bcef-4bdb-bc36-c927668414c5", wait_until="domcontentloaded")
+            time.sleep(4.5)
             _garantir_core_injetado(pg)
             return browser, pg
-    raise RuntimeError("Nenhuma aba do Google Flow aberta no Chrome CDP.")
+    # NUNCA sobrescrever abas do Facebook; usar apenas aba em branco ou criar 1 aba exclusiva para o Flow
+    pg0 = None
+    for pg in ctx.pages:
+        if pg.url in ("about:blank", "chrome://newtab/", ""):
+            pg0 = pg
+            break
+    if pg0 is None:
+        pg0 = ctx.new_page()
+    pg0.goto("https://flow.google.com/project/cff15a39-bcef-4bdb-bc36-c927668414c5", wait_until="domcontentloaded")
+    time.sleep(4.5)
+    _garantir_core_injetado(pg0)
+    return browser, pg0
 
 
 def ler_status_e_creditos_flow(cdp_url: str = CDP_URL_PADRAO) -> dict[str, Any]:
@@ -305,41 +377,54 @@ def gerar_imagem_rpc(
     - `aspecto`: 2 (9:16 vertical) ou 3 (16:9 horizontal)
     """
     ordem_candidatos = []
-    for m_cand in (modelo or "BELUGA", "BELUGA", "HARBOR_SEAL", "GEM_PIX_2"):
+    for m_cand in (modelo or "HARBOR_SEAL", "HARBOR_SEAL", "GEM_PIX_2", "BELUGA"):
         if m_cand not in ordem_candidatos and m_cand not in _QUOTA_DIARIA_IMAGEM_ESGOTADA:
             ordem_candidatos.append(m_cand)
     if not ordem_candidatos:
-        ordem_candidatos = ["BELUGA", "HARBOR_SEAL", "GEM_PIX_2"]
+        ordem_candidatos = ["HARBOR_SEAL", "GEM_PIX_2", "BELUGA"]
 
-    res = _eval_flow_js_paralelo(
-        """async ({ prompt, refs, aspecto, modelos }) => {
-            const c = window.__zerumCandidateCoreV1;
-            if (!c) return { ok: false, erro: 'CORE_NAO_INJETADO' };
-            const info = c.info();
-            let ultimo = null;
-            const esgotados = [];
-            for (const mod of modelos) {
-                const r = await c.imagem({
-                    prompt,
-                    refs: refs || [],
-                    aspecto: aspecto || 2,
-                    modelo: mod,
-                    proj: info.projeto
-                });
-                ultimo = { ...r, modeloUsado: mod, esgotados };
-                if (r && r.ok && (r.mediaId || (Array.isArray(r.cands) && r.cands.length > 0))) {
-                    return ultimo;
+    res = None
+    for _att_img_traffic in range(3):
+        _cadenciar_disparo_nao_bloqueante(0.25)
+        res = _eval_flow_js_paralelo(
+            """async ({ prompt, refs, aspecto, modelos }) => {
+                const c = window.__zerumCandidateCoreV1;
+                if (!c) return { ok: false, erro: 'CORE_NAO_INJETADO' };
+                const info = c.info();
+                let ultimo = null;
+                const esgotados = [];
+                for (const mod of modelos) {
+                    const r = await c.imagem({
+                        prompt,
+                        refs: refs || [],
+                        aspecto: aspecto || 2,
+                        modelo: mod,
+                        proj: info.projeto
+                    });
+                    ultimo = { ...r, modeloUsado: mod, esgotados };
+                    if (r && r.ok && (r.mediaId || (Array.isArray(r.cands) && r.cands.length > 0))) {
+                        return ultimo;
+                    }
+                    if (r && String(r.erro || '').includes('DAILY_QUOTA_REACHED')) {
+                        esgotados.push(mod);
+                    }
                 }
-                if (r && String(r.erro || '').includes('DAILY_QUOTA_REACHED')) {
-                    esgotados.push(mod);
-                }
-            }
-            return ultimo || { ok: false, erro: 'NENHUM_MODELO_IMAGEM_ACEITO', esgotados };
-        }""",
-        {"prompt": prompt, "refs": refs or [], "aspecto": aspecto, "modelos": ordem_candidatos},
-        cdp_url=cdp_url,
-        timeout_s=180.0,
-    )
+                return ultimo || { ok: false, erro: 'NENHUM_MODELO_IMAGEM_ACEITO', esgotados };
+            }""",
+            {"prompt": prompt, "refs": refs or [], "aspecto": aspecto, "modelos": ordem_candidatos},
+            cdp_url=cdp_url,
+            timeout_s=180.0,
+        )
+        if isinstance(res, dict) and not res.get("ok") and (
+            res.get("erro") == "INCOMUM"
+            or "TOO_MUCH_TRAFFIC" in str(res.get("raw") or "")
+            or "UNUSUAL_ACTIVITY" in str(res.get("raw") or "")
+        ):
+            recarregar_aba_flow_anti_traffic(cdp_url)
+            time.sleep(1.5)
+            continue
+        break
+
     if isinstance(res, dict):
         for m_esg in res.get("esgotados") or []:
             _QUOTA_DIARIA_IMAGEM_ESGOTADA.add(str(m_esg))
@@ -356,7 +441,7 @@ def gerar_video_rpc(
     first_frame_id: str | None = None,
     last_frame_id: str | None = None,
     refs: list[str] | None = None,
-    modelo: str = "veo_3_1_i2v_lite_low_priority",
+    modelo: str = "abra_i2v_8s",
     tipo: str = "i2v",
     aspecto: int = 1,
     cdp_url: str = CDP_URL_PADRAO,
@@ -364,47 +449,68 @@ def gerar_video_rpc(
     """
     Dispara geração de vídeo no Google Flow via RPC (`eb1hJf` i2v, `MZZa6b` r2v, `nprQif` interpolation, `YhhmEf` t2v).
     - `aspecto`: 1 (9:16 vertical) ou 2 (16:9 horizontal)
-    - Faz resolução automática de modelo compatível com a conta (Ultra vs Pro: `veo_3_1_i2v_lite_low_priority` 0 créditos -> `veo_3_1_i2v_lite` -> `veo_3_1_i2v_s_fast_portrait_ultra` -> `veo_3_1_i2v_s_fast`).
+    - Prioriza Omni 1.1 Flash (`abra_i2v_8s` / `abra_i2v_6s`) quando solicitado, com fallback para `veo_3_1_i2v_lite_low_priority`.
     """
-    # TRAVA ESTRITA 0 CRÉDITOS (Low Priority Only): nunca faz fallback para modelos pagos
-    modelos_tentativa = ["veo_3_1_i2v_lite_low_priority"] if tipo == "i2v" else [modelo]
+    if tipo == "i2v":
+        if modelo and (modelo.startswith("abra_") or modelo.startswith("omni_")):
+            modelos_tentativa = [modelo, "abra_i2v_8s", "abra_i2v_6s", "veo_3_1_i2v_lite_low_priority"]
+            modelos_tentativa = list(dict.fromkeys(modelos_tentativa))
+        else:
+            modelos_tentativa = [modelo or "abra_i2v_8s", "abra_i2v_8s", "veo_3_1_i2v_lite_low_priority"]
+            modelos_tentativa = list(dict.fromkeys(modelos_tentativa))
+    else:
+        modelos_tentativa = [modelo]
 
-    res = _eval_flow_js_paralelo(
-        """async ({ tipo, prompt, refs, img, imgFim, modelos, aspecto }) => {
-            const c = window.__zerumCandidateCoreV1;
-            if (!c) return { ok: false, erro: 'CORE_NAO_INJETADO' };
-            const info = c.info();
-            let ultimo = null;
-            for (const mod of modelos) {
-                const r = await c.video({
-                    tipo,
-                    prompt,
-                    refs: refs || [],
-                    img: img || undefined,
-                    imgFim: imgFim || undefined,
-                    modelo: mod,
-                    aspecto: aspecto || 1,
-                    proj: info.projeto
-                });
-                ultimo = { ...r, modeloUsado: mod };
-                if (r && r.ok && Array.isArray(r.cands) && r.cands.length > 0) {
-                    return ultimo;
+    res = None
+    for _att_traffic in range(4):
+        _cadenciar_disparo_nao_bloqueante(2.2)
+        res = _eval_flow_js_paralelo(
+            """async ({ tipo, prompt, refs, img, imgFim, modelos, aspecto }) => {
+                const c = window.__zerumCandidateCoreV1;
+                if (!c) return { ok: false, erro: 'CORE_NAO_INJETADO' };
+                const info = c.info();
+                let ultimo = null;
+                for (const mod of modelos) {
+                    const r = await c.video({
+                        tipo,
+                        prompt,
+                        refs: refs || [],
+                        img: img || undefined,
+                        imgFim: imgFim || undefined,
+                        modelo: mod,
+                        aspecto: aspecto || 1,
+                        proj: info.projeto
+                    });
+                    ultimo = { ...r, modeloUsado: mod };
+                    if (r && r.ok && Array.isArray(r.cands) && r.cands.length > 0) {
+                        return ultimo;
+                    }
                 }
-            }
-            return ultimo || { ok: false, erro: 'NENHUM_MODELO_VIDEO_ACEITO' };
-        }""",
-        {
-            "tipo": tipo,
-            "prompt": prompt,
-            "refs": refs or [],
-            "img": first_frame_id,
-            "imgFim": last_frame_id,
-            "modelos": modelos_tentativa,
-            "aspecto": aspecto,
-        },
-        cdp_url=cdp_url,
-        timeout_s=120.0,
-    )
+                return ultimo || { ok: false, erro: 'NENHUM_MODELO_VIDEO_ACEITO' };
+            }""",
+            {
+                "tipo": tipo,
+                "prompt": prompt,
+                "refs": refs or [],
+                "img": first_frame_id,
+                "imgFim": last_frame_id,
+                "modelos": modelos_tentativa,
+                "aspecto": aspecto,
+            },
+            cdp_url=cdp_url,
+            timeout_s=120.0,
+        )
+
+        if isinstance(res, dict) and not res.get("ok") and (
+            res.get("erro") == "INCOMUM"
+            or "TOO_MUCH_TRAFFIC" in str(res.get("raw") or "")
+            or "UNUSUAL_ACTIVITY" in str(res.get("raw") or "")
+        ):
+            recarregar_aba_flow_anti_traffic(cdp_url)
+            time.sleep(1.5)
+            continue
+        break
+
     if isinstance(res, dict):
         cands = list(res.get("cands") or res.get("candidatos") or [])
         if res.get("videoId") and res["videoId"] not in cands:

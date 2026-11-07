@@ -68,3 +68,19 @@ Dê dois cliques em **`3_INICIAR_STUDIO_BETA.bat`**.
 ├── fonts/                        # Fontes Poppins Bold/Black, Montserrat e Anton
 └── prontos/                      # Pasta onde os vídeos finais verificados são entregues
 ```
+
+
+---
+
+## 🛡️ Novidades da Versão 2.0 Beta (Destravamento de "Atividade Incomum" em Potência Máxima)
+
+A versão **2.0** (`forja/flow_rpc_direto_v2.py`, `forja/flow_rpc_direto.py` e `motor_turbo_cdp_v2.py`, mantendo o v1.0 original salvo em `forja/flow_rpc_direto_v1.py`) inclui as **4 travas anti-bloqueio** para rodar lotes de +100 vídeos seguidos sem cair em `UNUSUAL_ACTIVITY` ou `TOO_MUCH_TRAFFIC`:
+
+1. **Micro-Cadenciador Não-Bloqueante (`_cadenciar_disparo_nao_bloqueante`)**:
+   - Espaça apenas o instante de partida de cada requisição (`0.25s` entre imagens e `2.2s` entre vídeos) sem segurar o lock durante a renderização. Evita *bursts* de `0ms` que derrubam o score do Google reCAPTCHA Enterprise v3.
+2. **WebSocket CDP Direto (`14 Canais Simultâneos`)**:
+   - Comunicação direta via WebSocket com cache de aba (`/json/list` por `15s`) e `BoundedSemaphore(14)`.
+3. **Auto-Reload + Aquecimento Humano de Mouse (`recarregar_aba_flow_anti_traffic`)**:
+   - Se o Google Flow retornar `INCOMUM`, `UNUSUAL_ACTIVITY` ou `TOO_MUCH_TRAFFIC`, o motor recarrega a aba automaticamente (cooldown de `45s`), reinjeta `trap-main.js` + `flow-core.js` e faz micro-movimentos humanos de mouse na tela para restaurar o score do reCAPTCHA Enterprise v3 para `0.9` antes de repetir o disparo.
+4. **Rotação Automática de Modelos de Imagem Anti-Quota**:
+   - Alterna automaticamente entre `BELUGA`, `HARBOR_SEAL` e `GEM_PIX_2` caso algum modelo atinja `DAILY_QUOTA_REACHED`.
