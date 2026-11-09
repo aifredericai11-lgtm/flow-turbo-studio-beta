@@ -241,12 +241,36 @@ def _obter_aba_flow(playwright_instance: Any, cdp_url: str = CDP_URL_PADRAO):
     browser = playwright_instance.chromium.connect_over_cdp(cdp_url, timeout=25000)
     ctx = browser.contexts[0]
     for pg in ctx.pages:
-        if "flow.google.com/project/" in pg.url or ("labs.google" in pg.url and "/project/" in pg.url):
+        if "flow.google.com/project/" in pg.url:
             _garantir_core_injetado(pg)
             return browser, pg
     for pg in ctx.pages:
+        if "labs.google" in pg.url and "/project/" in pg.url:
+            import re as _re
+            m_p = _re.search(r"/project/([0-9a-fA-F-]{36})", pg.url)
+            if m_p:
+                pg.goto(f"https://flow.google.com/project/{m_p.group(1)}", wait_until="domcontentloaded")
+                time.sleep(4.5)
+            _garantir_core_injetado(pg)
+            return browser, pg
+    import os as _os
+    fallback_proj_url = _os.getenv("FLOW_PROJECT_URL", "https://flow.google.com/project/cff15a39-bcef-4bdb-bc36-c927668414c5")
+    for pg in ctx.pages:
         if "flow.google.com" in pg.url or "labs.google" in pg.url:
-            pg.goto("https://flow.google.com/project/cff15a39-bcef-4bdb-bc36-c927668414c5", wait_until="domcontentloaded")
+            try:
+                href_proj = pg.evaluate("""() => {
+                    const a = document.querySelector('a[href*="/project/"]');
+                    return a ? a.href : '';
+                }""")
+                if href_proj and "/project/" in str(href_proj):
+                    import re as _re
+                    m_p = _re.search(r"/project/([0-9a-fA-F-]{36})", str(href_proj))
+                    target_u = f"https://flow.google.com/project/{m_p.group(1)}" if m_p else str(href_proj)
+                    pg.goto(target_u, wait_until="domcontentloaded")
+                else:
+                    pg.goto(fallback_proj_url, wait_until="domcontentloaded")
+            except Exception:
+                pg.goto(fallback_proj_url, wait_until="domcontentloaded")
             time.sleep(4.5)
             _garantir_core_injetado(pg)
             return browser, pg
@@ -258,7 +282,7 @@ def _obter_aba_flow(playwright_instance: Any, cdp_url: str = CDP_URL_PADRAO):
             break
     if pg0 is None:
         pg0 = ctx.new_page()
-    pg0.goto("https://flow.google.com/project/cff15a39-bcef-4bdb-bc36-c927668414c5", wait_until="domcontentloaded")
+    pg0.goto(fallback_proj_url, wait_until="domcontentloaded")
     time.sleep(4.5)
     _garantir_core_injetado(pg0)
     return browser, pg0
@@ -552,13 +576,32 @@ def aguardar_midia_rpc(
         dest.parent.mkdir(parents=True, exist_ok=True)
         for _att_dl in range(3):
             try:
+                import ssl as _ssl
                 import urllib.request as _ureq
+                ctx_ssl = _ssl._create_unverified_context()
                 req = _ureq.Request(url_dl, headers={"User-Agent": "Mozilla/5.0"})
-                with _ureq.urlopen(req, timeout=45) as r_dl:
+                with _ureq.urlopen(req, timeout=45, context=ctx_ssl) as r_dl:
                     if r_dl.status == 200:
                         dest.write_bytes(r_dl.read())
                         if dest.exists() and dest.stat().st_size > 1000:
                             return True
+            except Exception:
+                pass
+            try:
+                dl_b64 = _eval_flow_js_paralelo(
+                    """async ({ u }) => {
+                        const c = window.__zerumCandidateCoreV1;
+                        if (c && typeof c.baixarBase64 === 'function') return await c.baixarBase64(u);
+                        return { ok: false };
+                    }""",
+                    {"u": url_dl},
+                    cdp_url=cdp_url,
+                    timeout_s=60.0,
+                )
+                if isinstance(dl_b64, dict) and dl_b64.get("ok") and dl_b64.get("b64"):
+                    dest.write_bytes(base64.b64decode(dl_b64["b64"]))
+                    if dest.exists() and dest.stat().st_size > 1000:
+                        return True
             except Exception:
                 pass
             try:
