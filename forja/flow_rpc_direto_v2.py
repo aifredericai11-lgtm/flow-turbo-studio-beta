@@ -1246,17 +1246,17 @@ def gerar_imagens_lote_rpc(
     return res or {"ok": False, "erro": "FALHA_IMAGEM_LOTE", "cdp_url": u}
 
 
-def gerar_videos_lote_rpc(
-    itens: list[dict[str, Any]],
-    modelo: str = "veo_3_1_i2v_lite_low_priority",
-    aspecto: int = 1,
-    cdp_url: str = CDP_URL_PADRAO,
+def _disparar_sublote_video_rpc(
+    itens_sub: list[dict[str, Any]],
+    modelo: str,
+    aspecto: int,
+    cdp_url: str,
 ) -> dict[str, Any]:
-    hint_ids = [str(it.get("img") or it.get("first_frame_id") or "") for it in itens if (it.get("img") or it.get("first_frame_id"))]
+    hint_ids = [str(it.get("img") or it.get("first_frame_id") or "") for it in itens_sub if (it.get("img") or it.get("first_frame_id"))]
     u = _resolver_cdp_efetivo(cdp_url, owner_hint_ids=hint_ids)
 
     itens_local = []
-    for it in itens:
+    for it in itens_sub:
         it_c = dict(it)
         raw_img = it_c.get("img") or it_c.get("first_frame_id")
         if raw_img:
@@ -1265,11 +1265,11 @@ def gerar_videos_lote_rpc(
 
     exige_omni = bool(modelo and (modelo.startswith("macaron_cookie_") or modelo.startswith("abra_") or modelo.startswith("omni_")))
     if modelo == "veo_3_1_i2v_lite_low_priority":
-        modelos_tentativa = ["veo_3_1_i2v_lite_low_priority"]
+        modelos_tentativa = ["veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite"]
     elif exige_omni:
         modelos_tentativa = [modelo]
     else:
-        modelos_tentativa = [modelo or "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite_low_priority"]
+        modelos_tentativa = [modelo or "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite"]
         modelos_tentativa = list(dict.fromkeys(modelos_tentativa))
 
     core_js = EXT_DIR / "flow-core.js"
@@ -1277,11 +1277,11 @@ def gerar_videos_lote_rpc(
 
     res = None
     for _ in range(4):
-        _cadenciar_disparo_nao_bloqueante(1.85, cdp_url=u)
+        _cadenciar_disparo_nao_bloqueante(1.45, cdp_url=u)
         res = _eval_flow_js_paralelo(
             """async ({ itens, aspecto, modelos, coreCode }) => {
                 let c = window.__zerumCandidateCoreV1;
-                if (c && typeof c.videoLote !== 'function' && coreCode) {
+                if ((!c || c.v !== '0.5.1-ultrabatch' || typeof c.videoLote !== 'function') && coreCode) {
                     try { eval(coreCode); c = window.__zerumCandidateCoreV1; } catch (e) {}
                 }
                 if (!c || typeof c.videoLote !== 'function') return { ok: false, erro: 'CORE_NAO_INJETADO' };
@@ -1291,6 +1291,7 @@ def gerar_videos_lote_rpc(
                     const batchIn = itens.map(it => ({
                         prompt: it.prompt,
                         img: it.img || it.first_frame_id,
+                        refs: it.refs || [],
                         modelo: it.modelo || mod,
                         aspecto: it.aspecto || aspecto || 1
                     }));
@@ -1315,7 +1316,7 @@ def gerar_videos_lote_rpc(
             ep = _get_ep(u)
             ep.cooldown_until = time.time() + 30.0
             ep.last_event = "videoLote INCOMUM -> reload + failover p/ outra conta!"
-            recarregar_aba_flow_anti_traffic(u)
+            threading.Thread(target=recarregar_aba_flow_anti_traffic, args=(u,), daemon=True).start()
             outras = [
                 c_u for c_u in listar_contas_flow_ativas()
                 if c_u != u and _get_ep(c_u).cooldown_until < time.time() and (not exige_omni or not c_u.endswith(":9225"))
@@ -1323,50 +1324,112 @@ def gerar_videos_lote_rpc(
             if outras:
                 u = outras[next(_RR_COUNTER) % len(outras)]
                 itens_local = []
-                for it in itens:
+                for it in itens_sub:
                     it_c = dict(it)
                     raw_img = it_c.get("img") or it_c.get("first_frame_id")
                     if raw_img:
                         it_c["img"] = _garantir_ref_na_conta(str(raw_img), u)
                     itens_local.append(it_c)
-            time.sleep(2.0)
+            time.sleep(1.5)
             continue
         break
-    if isinstance(res, dict):
-        res["cdp_url"] = u
-        itens_ret = list(res.get("items") or [])
-        # Auto-heal: se o lote tinha 4 takes (ex.: Take 4 em V08) e o Flow devolveu apenas 3 ou algum veio sem cands,
-        # dispara automaticamente os takes faltantes via gerar_video_rpc (com auto-failover/t2v/i2v) para NUNCA dar SEM_CANDIDATOS_UUID!
-        while len(itens_ret) < len(itens):
-            itens_ret.append({"ok": False, "cands": []})
-        for idx_it, it_orig in enumerate(itens):
-            it_r = itens_ret[idx_it] if isinstance(itens_ret[idx_it], dict) else {"ok": False, "cands": []}
-            c_ids = list(it_r.get("cands") or ([it_r["mediaId"]] if it_r.get("mediaId") else []))
-            if not c_ids:
-                raw_img_i = it_orig.get("img") or it_orig.get("first_frame_id")
-                r_single = gerar_video_rpc(
-                    prompt=str(it_orig.get("prompt") or ""),
-                    first_frame_id=str(raw_img_i) if raw_img_i else None,
-                    refs=it_orig.get("refs"),
-                    modelo=str(it_orig.get("modelo") or modelo),
-                    tipo="i2v" if raw_img_i else "t2v",
-                    aspecto=int(it_orig.get("aspecto") or aspecto or 1),
-                    cdp_url=cdp_url,
-                )
-                c_single = list(r_single.get("cands") or [])
-                it_r = {
-                    "ok": bool(r_single.get("ok") and c_single),
-                    "mediaId": c_single[0] if c_single else "",
-                    "cands": c_single,
-                    "cdp_url": r_single.get("cdp_url") or u,
-                }
-                itens_ret[idx_it] = it_r
-            else:
-                it_r["cdp_url"] = u
-                _registrar_midia_na_conta([str(x) for x in c_ids if x], u)
-        res["items"] = itens_ret
-        res["ok"] = len(itens_ret) == len(itens) and all(bool(x.get("cands")) for x in itens_ret)
-    return res or {"ok": False, "erro": "FALHA_VIDEO_LOTE", "cdp_url": u}
+
+    if not isinstance(res, dict):
+        res = {"ok": False, "items": [], "cdp_url": u}
+    res["cdp_url"] = u
+    itens_ret = list(res.get("items") or [])
+    while len(itens_ret) < len(itens_sub):
+        itens_ret.append({"ok": False, "cands": []})
+
+    for idx_it, it_orig in enumerate(itens_sub):
+        it_r = itens_ret[idx_it] if isinstance(itens_ret[idx_it], dict) else {"ok": False, "cands": []}
+        c_ids = list(it_r.get("cands") or ([it_r["mediaId"]] if it_r.get("mediaId") else []))
+        if not c_ids:
+            raw_img_i = it_orig.get("img") or it_orig.get("first_frame_id")
+            r_single = gerar_video_rpc(
+                prompt=str(it_orig.get("prompt") or ""),
+                first_frame_id=str(raw_img_i) if raw_img_i else None,
+                refs=it_orig.get("refs"),
+                modelo=str(it_orig.get("modelo") or modelo),
+                tipo="i2v" if raw_img_i else "t2v",
+                aspecto=int(it_orig.get("aspecto") or aspecto or 1),
+                cdp_url=cdp_url,
+            )
+            c_single = list(r_single.get("cands") or [])
+            it_r = {
+                "ok": bool(r_single.get("ok") and c_single),
+                "mediaId": c_single[0] if c_single else "",
+                "cands": c_single,
+                "cdp_url": r_single.get("cdp_url") or u,
+            }
+            itens_ret[idx_it] = it_r
+        else:
+            it_r["cdp_url"] = u
+            _registrar_midia_na_conta([str(x) for x in c_ids if x], u)
+    res["items"] = itens_ret
+    res["ok"] = len(itens_ret) == len(itens_sub) and all(bool(x.get("cands")) for x in itens_ret)
+    return res
+
+
+def gerar_videos_lote_rpc(
+    itens: list[dict[str, Any]],
+    modelo: str = "veo_3_1_i2v_lite_low_priority",
+    aspecto: int = 1,
+    cdp_url: str = CDP_URL_PADRAO,
+    max_por_pacote_rpc: int = 2,
+) -> dict[str, Any]:
+    """
+    Suporta QUALQUER número de takes por vídeo (1, 2, 3, 4, 6, 8, 12, N takes) sem limite fixo!
+    Fatias automaticamente listas grandes em micro-pacotes de `max_por_pacote_rpc` (padrão: 2 takes por chamada `eb1hJf`,
+    teto seguro do Google Flow Lower Priority que evita truncamento do 4º..Nº take), distribuindo os micro-pacotes
+    em paralelo entre as contas ativas do pool e garantindo 100% dos takes com UUIDs válidos (`ZERO SEM_CANDIDATOS_UUID`).
+    """
+    if not itens:
+        return {"ok": False, "items": [], "erro": "LOTE_VAZIO", "cdp_url": cdp_url}
+
+    chunk_sz = max(1, int(max_por_pacote_rpc or 2))
+    if len(itens) <= chunk_sz:
+        return _disparar_sublote_video_rpc(itens, modelo=modelo, aspecto=aspecto, cdp_url=cdp_url)
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    chunks: list[tuple[int, list[dict[str, Any]]]] = [
+        (i, itens[i : i + chunk_sz]) for i in range(0, len(itens), chunk_sz)
+    ]
+    ativas = listar_contas_flow_ativas()
+    resultados_por_offset: dict[int, list[dict[str, Any]]] = {}
+
+    def _rodar_chunk(idx_chunk: int, offset: int, sub_lista: list[dict[str, Any]]) -> tuple[int, list[dict[str, Any]]]:
+        # Se cdp_url é o padrão e há múltiplas contas ativas, distribui cada par de takes em Round-Robin entre as contas!
+        target_u = cdp_url
+        if cdp_url == CDP_URL_PADRAO and len(ativas) > 1 and not obter_conta_atual_thread():
+            target_u = escolher_conta_flow(exige_omni=False)
+        elif idx_chunk > 0:
+            time.sleep(0.9 * idx_chunk)
+        r_sub = _disparar_sublote_video_rpc(sub_lista, modelo=modelo, aspecto=aspecto, cdp_url=target_u)
+        return offset, list(r_sub.get("items") or [])
+
+    with ThreadPoolExecutor(max_workers=min(8, len(chunks))) as ex_chunks:
+        futs = [
+            ex_chunks.submit(_rodar_chunk, idx_c, off, sub)
+            for idx_c, (off, sub) in enumerate(chunks)
+        ]
+        for f in futs:
+            off, sub_items = f.result()
+            resultados_por_offset[off] = sub_items
+
+    todos_itens: list[dict[str, Any]] = []
+    for off, _ in chunks:
+        todos_itens.extend(resultados_por_offset.get(off, []))
+
+    ok_all = len(todos_itens) == len(itens) and all(bool(x.get("cands")) for x in todos_itens)
+    cdp_usado = (todos_itens[0].get("cdp_url") if todos_itens else None) or cdp_url
+    return {
+        "ok": ok_all,
+        "items": todos_itens,
+        "cdp_url": cdp_usado,
+        "total_takes": len(todos_itens),
+    }
 
 
 def _consultar_status_video_coalescido(ids: list[str], cdp_url: str = CDP_URL_PADRAO, min_interval_s: float = 2.4) -> dict[str, Any]:

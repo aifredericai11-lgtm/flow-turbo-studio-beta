@@ -275,51 +275,92 @@
     const cands = ids.filter((x) => !fora.has(x));
     return { ok: r.s === 200 && !e && cands.length >= 1, videoId: '', cands, fluxoId: ids[0] || '', erro: e, s: r.s, rpc, raw: e ? r.t.slice(0, 400) : '' };
   }
-  // videoLote: dispara N takes de vídeo em 1 único RPC eb1hJf com 1 único token reCAPTCHA Enterprise,
-  // com fallback robusto de extração de UUIDs e suporte misto i2v/t2v para nunca retornar SEM_CANDIDATOS_UUID!
+  // videoLote: suporta QUALQUER quantidade N de takes (1, 2, 3, 4, 6, 8, 12+ takes) sem truncar!
+  // Fatiamento automático em micro-pacotes de até 2 takes por RPC eb1hJf (teto seguro do Flow Lower Priority),
+  // com suporte misto i2v/t2v/r2v e fallback automático por item caso algum slot volte sem UUID.
   async function videoLote(itens, proj) {
     const P = proj || PROJ_URL(); if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE');
     if (!Array.isArray(itens) || !itens.length) return { ok: false, items: [], erro: 'LOTE_VAZIO' };
     const validId = x => typeof x === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x);
-    // Se algum item não tiver img válida (ex.: Take 4 POV t2v), dispara via video() individual com auto-heal t2v/i2v
-    if (itens.some(it => !validId(it.img || it.first_frame_id))) {
-      const items = [];
-      for (const it of itens) {
-        const imgId = it.img || it.first_frame_id || undefined;
-        const r = await video({
-          tipo: validId(imgId) ? 'i2v' : 't2v',
-          prompt: it.prompt,
-          refs: it.refs || [],
-          img: imgId,
-          modelo: it.modelo || 'veo_3_1_i2v_lite_low_priority',
-          aspecto: it.aspecto || 1,
-          proj: P
-        });
-        items.push({ ok: !!(r && r.ok && r.cands && r.cands.length), mediaId: (r.cands && r.cands[0]) || '', workflowId: r.fluxoId || '', cands: r.cands || [], erro: r.erro || '' });
-      }
-      return { ok: items.length === itens.length && items.every(x => x.ok), items, erro: (items.find(x => x.erro)?.erro) || '' };
+
+    async function _dispararUm(it) {
+      const imgId = it.img || it.first_frame_id || undefined;
+      const r = await video({
+        tipo: validId(imgId) ? 'i2v' : ((Array.isArray(it.refs) && it.refs.some(validId)) ? 'r2v' : 't2v'),
+        prompt: it.prompt,
+        refs: it.refs || [],
+        img: validId(imgId) ? imgId : undefined,
+        modelo: it.modelo || 'veo_3_1_i2v_lite_low_priority',
+        aspecto: it.aspecto || 1,
+        proj: P
+      });
+      return {
+        ok: !!(r && r.ok && r.cands && r.cands.length),
+        mediaId: (r.cands && r.cands[0]) || '',
+        workflowId: r.fluxoId || '',
+        cands: r.cands || [],
+        erro: r.erro || ''
+      };
     }
-    const tk = await token('VIDEO_GENERATION');
-    const reqs = itens.map((it) => {
-      const M = it.modelo || 'veo_3_1_i2v_lite_low_priority';
-      const A = it.aspecto || 1;
-      const img = it.img || it.first_frame_id;
-      return [[null, null, [[[it.prompt]]]], M, A, null, [null, img, null, null, null, [0, null, 1, 1]], [null, null, null, null, U(), U()]];
-    });
-    const inner = [reqs, CTX(P, tk), [U(), 2]];
-    const r = await batch('eb1hJf', inner, P);
-    const e = erro(r.t);
-    const payload = rpcPayload(r.t, 'eb1hJf');
-    const rows = Array.isArray(payload?.[2]) ? payload[2] : [];
-    const fora = new Set([P, ...itens.map(it => it.img || it.first_frame_id)].filter(Boolean).map(x => String(x).toLowerCase()));
-    const items = rows.map((row) => {
-      const wfId = row?.[0] || '';
-      const mid = row?.[3]?.[4] || '';
-      const rowUuids = uuids(JSON.stringify(row || [])).filter(x => !fora.has(String(x).toLowerCase()));
-      const cands = Array.from(new Set([mid, ...rowUuids, wfId].filter(Boolean)));
-      return { ok: cands.length > 0 && !e, mediaId: mid || cands[0] || '', workflowId: wfId, cands };
-    });
-    return { ok: r.s === 200 && !e && items.length === itens.length && items.every(x => x.ok), items, erro: e, s: r.s, raw: e ? r.t.slice(0, 400) : '' };
+
+    const CHUNK_MAX = 2;
+    const finalItems = new Array(itens.length);
+    let lastErr = '';
+
+    for (let start = 0; start < itens.length; start += CHUNK_MAX) {
+      const slice = itens.slice(start, start + CHUNK_MAX);
+      // Se algum item deste par não tiver img válida (ex.: take POV t2v), dispara individualmente com auto-heal t2v/r2v
+      if (slice.some(it => !validId(it.img || it.first_frame_id))) {
+        for (let k = 0; k < slice.length; k++) {
+          const r1 = await _dispararUm(slice[k]);
+          finalItems[start + k] = r1;
+          if (r1.erro) lastErr = r1.erro;
+          if (r1.erro === 'INCOMUM' || r1.erro === 'TRAFEGO') break;
+        }
+        if (lastErr === 'INCOMUM' || lastErr === 'TRAFEGO') break;
+        continue;
+      }
+
+      const tk = await token('VIDEO_GENERATION');
+      const reqs = slice.map((it) => {
+        const M = it.modelo || 'veo_3_1_i2v_lite_low_priority';
+        const A = it.aspecto || 1;
+        const img = it.img || it.first_frame_id;
+        return [[null, null, [[[it.prompt]]]], M, A, null, [null, img, null, null, null, [0, null, 1, 1]], [null, null, null, null, U(), U()]];
+      });
+      const inner = [reqs, CTX(P, tk), [U(), 2]];
+      const r = await batch('eb1hJf', inner, P);
+      const e = erro(r.t);
+      if (e) lastErr = e;
+      const payload = rpcPayload(r.t, 'eb1hJf');
+      const rows = Array.isArray(payload?.[2]) ? payload[2] : [];
+      const fora = new Set([P, ...slice.map(it => it.img || it.first_frame_id)].filter(Boolean).map(x => String(x).toLowerCase()));
+
+      for (let k = 0; k < slice.length; k++) {
+        const row = rows[k];
+        const wfId = row?.[0] || '';
+        const mid = row?.[3]?.[4] || '';
+        const rowUuids = row ? uuids(JSON.stringify(row)).filter(x => !fora.has(String(x).toLowerCase())) : [];
+        const cands = Array.from(new Set([mid, ...rowUuids, wfId].filter(Boolean)));
+        if (cands.length > 0 && !e) {
+          finalItems[start + k] = { ok: true, mediaId: mid || cands[0] || '', workflowId: wfId, cands, erro: '' };
+        } else if (e !== 'INCOMUM' && e !== 'TRAFEGO') {
+          // Fallback imediato para o item que faltou no chunk
+          const rFallback = await _dispararUm(slice[k]);
+          finalItems[start + k] = rFallback;
+          if (rFallback.erro) lastErr = rFallback.erro;
+        } else {
+          finalItems[start + k] = { ok: false, mediaId: '', workflowId: '', cands: [], erro: e };
+        }
+      }
+      if (e === 'INCOMUM' || e === 'TRAFEGO') break;
+    }
+
+    for (let i = 0; i < itens.length; i++) {
+      if (!finalItems[i]) finalItems[i] = { ok: false, mediaId: '', workflowId: '', cands: [], erro: lastErr || 'NAO_DISPARADO' };
+    }
+    const allOk = finalItems.length === itens.length && finalItems.every(x => x && x.ok && Array.isArray(x.cands) && x.cands.length > 0);
+    return { ok: allOk, items: finalItems, erro: allOk ? '' : (lastErr || 'FALHA_PARCIAL_LOTE'), s: 200 };
   }
   // texto (Gemini do Flow, o mesmo do kit da ferramenta): RPC agJzFb, token TEXT_GENERATION. partes = [{mime, b64}] (imagem/vídeo pequeno)
   async function texto({ prompt, sistema, partes, modelo, proj }) {

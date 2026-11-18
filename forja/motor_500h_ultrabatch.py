@@ -95,15 +95,21 @@ def carregar_cache_matrizes() -> dict[str, dict[str, str]]:
         return cache
 
 
-def salvar_item_cache_matrizes(chave: str, f1_id: str, f2_id: str, f3_id: str) -> None:
+def salvar_item_cache_matrizes(chave: str, f1_id: str, f2_id: str = "", f3_id: str = "", frames_list: list[str] | None = None) -> None:
     with _CACHE_LOCK:
-        cache: dict[str, dict[str, str]] = {}
+        cache: dict[str, dict[str, Any]] = {}
         if CACHE_MATRIZES_PATH.exists():
             try:
                 cache = json.loads(CACHE_MATRIZES_PATH.read_text(encoding="utf-8"))
             except Exception:
                 cache = {}
-        cache[chave] = {"f1_id": f1_id, "f2_id": f2_id, "f3_id": f3_id}
+        fl = list(frames_list or [x for x in (f1_id, f2_id, f3_id) if x])
+        cache[chave] = {
+            "f1_id": fl[0] if len(fl) > 0 else f1_id,
+            "f2_id": fl[1] if len(fl) > 1 else f2_id,
+            "f3_id": fl[2] if len(fl) > 2 else f3_id,
+            "frames": fl,
+        }
         CACHE_MATRIZES_PATH.parent.mkdir(parents=True, exist_ok=True)
         CACHE_MATRIZES_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -256,65 +262,102 @@ def _get_key_frame_lock(chave: str) -> threading.Lock:
         return _KEY_FRAME_LOCKS[chave]
 
 
+def obter_ou_gerar_n_frames_ultrabatch(
+    spec: dict[str, Any],
+    pasta_job: Path,
+    usar_cache: bool = True,
+    cdp_url: str = CDP_URL_PADRAO,
+) -> list[str]:
+    """
+    Gera ou recupera do cache qualquer quantidade `N` de quadros-base (`1..N` takes: 2, 3, 4, 6, 8, 12+ takes).
+    Se um take `i` em `prompts_img[i]` for vazio/`None` (ex.: Take POV `t2v` sem start frame), retorna `""` naquela posição!
+    """
+    prompts_vid = list(spec.get("prompts_vid") or [])
+    prompts_img = list(spec.get("prompts_img") or [])
+    n_takes = max(len(prompts_vid), len(prompts_img), 1)
+    while len(prompts_img) < n_takes:
+        prompts_img.append(prompts_img[-1] if prompts_img else "")
+
+    chave_cache = f"{spec.get('fmt_code', 'FMT')}::{spec.get('avatar', 'AV')}::{spec.get('roupa', 'RP')}::N{n_takes}"
+    chave_legacy = f"{spec.get('fmt_code', 'FMT')}::{spec.get('avatar', 'AV')}::{spec.get('roupa', 'RP')}"
+    chave_job = f"{spec.get('fmt_code', 'FMT')}::{spec.get('job_id', '')}"
+
+    with _get_key_frame_lock(chave_cache):
+        if usar_cache:
+            cache = carregar_cache_matrizes()
+            hit = cache.get(chave_cache) or cache.get(chave_job) or (cache.get(chave_legacy) if n_takes == 3 else None)
+            if hit:
+                fl_cached = list(hit.get("frames") or [hit.get("f1_id", ""), hit.get("f2_id", ""), hit.get("f3_id", "")])
+                if len(fl_cached) >= n_takes and all(bool(fl_cached[i]) or not prompts_img[i] for i in range(n_takes)):
+                    return [str(fl_cached[i] or "") for i in range(n_takes)]
+
+        refs_orig = list(spec.get("refs_orig") or [])
+        refs_s1 = [refs_orig[0]] if len(refs_orig) > 0 and refs_orig[0] else []
+
+        with _IMG_LOTE_SEM:
+            f1_id = ""
+            if prompts_img[0]:
+                f1_path = pasta_job / "frame_1.jpg"
+                for _ in range(4):
+                    r1 = gerar_imagem_rpc(prompt=prompts_img[0], refs=refs_s1, modelo="BELUGA", cdp_url=cdp_url)
+                    w1 = aguardar_midia_rpc(r1, tipo="image", destino_arquivo=f1_path, timeout_s=180, cdp_url=cdp_url)
+                    if w1.get("ok") and w1.get("mediaId"):
+                        f1_id = str(w1["mediaId"])
+                        break
+                    time.sleep(1.5)
+                if not f1_id:
+                    raise RuntimeError(f"Falha ao gerar frame_1 para {spec.get('job_id')}")
+
+            def _gerar_f_sub(idx_take: int) -> tuple[int, str]:
+                p_txt = str(prompts_img[idx_take] or "").strip()
+                if not p_txt:
+                    return idx_take, ""
+                # Se o prompt de imagem for idêntico ao frame 1, reaproveita f1_id sem gastar geração extra!
+                if p_txt == str(prompts_img[0] or "").strip() and f1_id:
+                    return idx_take, f1_id
+                dest_p = pasta_job / f"frame_{idx_take + 1}.jpg"
+                r_ids = [x for x in ([f1_id, refs_orig[idx_take]] if len(refs_orig) > idx_take and refs_orig[idx_take] else [f1_id]) if x]
+                for _ in range(4):
+                    r_sub = gerar_imagem_rpc(prompt=p_txt, refs=r_ids, modelo="BELUGA", cdp_url=cdp_url)
+                    w_sub = aguardar_midia_rpc(r_sub, tipo="image", destino_arquivo=dest_p, timeout_s=180, cdp_url=cdp_url)
+                    if w_sub.get("ok") and w_sub.get("mediaId"):
+                        return idx_take, str(w_sub["mediaId"])
+                    time.sleep(1.5)
+                return idx_take, ""
+
+            frames_out = [""] * n_takes
+            frames_out[0] = f1_id
+            if n_takes > 1:
+                with ThreadPoolExecutor(max_workers=min(6, n_takes - 1)) as ex_fn:
+                    futs = [ex_fn.submit(_gerar_f_sub, idx_t) for idx_t in range(1, n_takes)]
+                    for fut in futs:
+                        i_t, mid_t = fut.result()
+                        if prompts_img[i_t] and not mid_t:
+                            raise RuntimeError(f"Falha ao gerar frame_{i_t + 1} para {spec.get('job_id')}")
+                        frames_out[i_t] = mid_t
+
+        salvar_item_cache_matrizes(
+            chave_cache,
+            frames_out[0] if len(frames_out) > 0 else "",
+            frames_out[1] if len(frames_out) > 1 else "",
+            frames_out[2] if len(frames_out) > 2 else "",
+            frames_list=frames_out,
+        )
+        if n_takes == 3:
+            salvar_item_cache_matrizes(chave_legacy, frames_out[0], frames_out[1], frames_out[2], frames_list=frames_out)
+        return frames_out
+
+
 def obter_ou_gerar_3_frames_ultrabatch(
     spec: dict[str, Any],
     pasta_job: Path,
     usar_cache: bool = True,
     cdp_url: str = CDP_URL_PADRAO,
 ) -> tuple[str, str, str]:
-    chave_cache = f"{spec.get('fmt_code', 'FMT')}::{spec.get('avatar', 'AV')}::{spec.get('roupa', 'RP')}"
-    chave_job = f"{spec.get('fmt_code', 'FMT')}::{spec.get('job_id', '')}"
-
-    with _get_key_frame_lock(chave_cache):
-        if usar_cache:
-            cache = carregar_cache_matrizes()
-            hit = cache.get(chave_cache) or cache.get(chave_job)
-            if hit and hit.get("f1_id") and hit.get("f2_id") and hit.get("f3_id"):
-                return str(hit["f1_id"]), str(hit["f2_id"]), str(hit["f3_id"])
-
-        refs_orig = spec.get("refs_orig") or []
-        prompts_img = spec["prompts_img"]
-        f1_path = pasta_job / "frame_1.jpg"
-        f2_path = pasta_job / "frame_2.jpg"
-        f3_path = pasta_job / "frame_3.jpg"
-
-        refs_s1 = [refs_orig[0]] if len(refs_orig) > 0 and refs_orig[0] else []
-
-        with _IMG_LOTE_SEM:
-            f1_id = ""
-            for _ in range(4):
-                r1 = gerar_imagem_rpc(prompt=prompts_img[0], refs=refs_s1, modelo="BELUGA", cdp_url=cdp_url)
-                w1 = aguardar_midia_rpc(r1, tipo="image", destino_arquivo=f1_path, timeout_s=180, cdp_url=cdp_url)
-                if w1.get("ok") and w1.get("mediaId"):
-                    f1_id = str(w1["mediaId"])
-                    break
-                time.sleep(1.5)
-            if not f1_id:
-                raise RuntimeError(f"Falha ao gerar frame_1 para {spec.get('job_id')}")
-
-            refs_s2 = [f1_id, refs_orig[1]] if len(refs_orig) > 1 and refs_orig[1] else [f1_id]
-            refs_s3 = [f1_id, refs_orig[2]] if len(refs_orig) > 2 and refs_orig[2] else [f1_id]
-
-            def _gerar_f_sub(p_txt: str, r_ids: list[str], dest_p: Path) -> str:
-                for _ in range(4):
-                    r_sub = gerar_imagem_rpc(prompt=p_txt, refs=r_ids, modelo="BELUGA", cdp_url=cdp_url)
-                    w_sub = aguardar_midia_rpc(r_sub, tipo="image", destino_arquivo=dest_p, timeout_s=180, cdp_url=cdp_url)
-                    if w_sub.get("ok") and w_sub.get("mediaId"):
-                        return str(w_sub["mediaId"])
-                    time.sleep(1.5)
-                return ""
-
-            with ThreadPoolExecutor(max_workers=2) as ex_f23:
-                fut2 = ex_f23.submit(_gerar_f_sub, prompts_img[1], refs_s2, f2_path)
-                fut3 = ex_f23.submit(_gerar_f_sub, prompts_img[2], refs_s3, f3_path)
-                f2_id = fut2.result()
-                f3_id = fut3.result()
-
-            if not f2_id or not f3_id:
-                raise RuntimeError(f"Falha ao gerar [frame_2, frame_3] para {spec.get('job_id')}")
-
-        salvar_item_cache_matrizes(chave_cache, f1_id, f2_id, f3_id)
-        return f1_id, f2_id, f3_id
+    fl = obter_ou_gerar_n_frames_ultrabatch(spec=spec, pasta_job=pasta_job, usar_cache=usar_cache, cdp_url=cdp_url)
+    while len(fl) < 3:
+        fl.append(fl[-1] if fl else "")
+    return fl[0], fl[1], fl[2]
 
 
 def montar_video_1_passe_nvenc(
@@ -442,23 +485,28 @@ def produzir_video_ultrabatch_500h(
             "cached": True,
         }
 
+    prompts_vid = list(spec["prompts_vid"])
+    n_cenas = len(prompts_vid)
+    falas = list(spec.get("falas") or [""] * n_cenas)
+    while len(falas) < n_cenas:
+        falas.append("")
+
     if spec.get("_frames_resolvidos"):
-        f1_id, f2_id, f3_id = spec["_frames_resolvidos"]
+        frame_ids = list(spec["_frames_resolvidos"])
     else:
-        f1_id, f2_id, f3_id = obter_ou_gerar_3_frames_ultrabatch(
+        frame_ids = obter_ou_gerar_n_frames_ultrabatch(
             spec=spec,
             pasta_job=pasta_job,
             usar_cache=usar_cache_frames,
             cdp_url=cdp_url,
         )
-    frame_ids = [f1_id, f2_id, f3_id]
-    prompts_vid = spec["prompts_vid"]
-    falas = spec["falas"]
+    while len(frame_ids) < n_cenas:
+        frame_ids.append(frame_ids[-1] if frame_ids else "")
 
-    # Verifica quais cenas (1.mp4, 2.mp4, 3.mp4) já existem prontas em disco para reaproveitamento 0.0s!
+    # Verifica quais cenas (1.mp4 .. N.mp4) já existem prontas em disco para reaproveitamento 0.0s!
     res_cenas_prontas: dict[int, dict[str, Any]] = {}
     cenas_faltantes: list[int] = []
-    for idx_chk in range(3):
+    for idx_chk in range(n_cenas):
         c_chk = pasta_job / f"{idx_chk + 1}.mp4"
         if c_chk.exists() and c_chk.stat().st_size > 80_000:
             try:
@@ -483,7 +531,7 @@ def produzir_video_ultrabatch_500h(
         cenas_faltantes.append(idx_chk)
 
     ja_adquiriu_slots = bool(cands_pre_disparados)
-    slots_liberados = {i: (i not in cenas_faltantes) for i in range(3)}
+    slots_liberados = {i: (i not in cenas_faltantes) for i in range(n_cenas)}
     slots_lock = threading.Lock()
 
     if not ja_adquiriu_slots:
@@ -498,14 +546,14 @@ def produzir_video_ultrabatch_500h(
 
     try:
         mapa_cands_iniciais: dict[int, dict[str, Any]] = {}
-        if cands_pre_disparados and len(cands_pre_disparados) == 3:
+        if cands_pre_disparados and len(cands_pre_disparados) == n_cenas:
             for i_pre in cenas_faltantes:
                 mapa_cands_iniciais[i_pre] = cands_pre_disparados[i_pre]
         elif cenas_faltantes:
             for _att_lote in range(3):
                 r_lote = gerar_videos_lote_rpc(
                     [
-                        {"prompt": prompts_vid[i_f], "img": frame_ids[i_f], "aspecto": 1}
+                        {"prompt": prompts_vid[i_f], "img": frame_ids[i_f] or None, "aspecto": 1}
                         for i_f in cenas_faltantes
                     ],
                     modelo="veo_3_1_i2v_lite_low_priority",
@@ -531,9 +579,9 @@ def produzir_video_ultrabatch_500h(
                     else:
                         r_v = gerar_video_rpc(
                             prompt=prompts_vid[idx_c],
-                            first_frame_id=frame_ids[idx_c],
+                            first_frame_id=frame_ids[idx_c] or None,
                             modelo="veo_3_1_i2v_lite_low_priority",
-                            tipo="i2v",
+                            tipo="i2v" if frame_ids[idx_c] else "t2v",
                             cdp_url=cdp_url,
                         )
                     w_v = aguardar_midia_rpc(
@@ -581,15 +629,15 @@ def produzir_video_ultrabatch_500h(
             finally:
                 _liberar_slot(idx_c)
 
-        with ThreadPoolExecutor(max_workers=3) as ex_c:
-            futs = [ex_c.submit(_coletar_e_cortar_cena, ci) for ci in range(3)]
+        with ThreadPoolExecutor(max_workers=max(1, n_cenas)) as ex_c:
+            futs = [ex_c.submit(_coletar_e_cortar_cena, ci) for ci in range(n_cenas)]
             res_cenas = [f.result() for f in futs]
     finally:
-        for i_s in range(3):
+        for i_s in range(n_cenas):
             _liberar_slot(i_s)
 
     res_cenas.sort(key=lambda x: x["idx"])
-    clipes = [pasta_job / f"{i + 1}.mp4" for i in range(3)]
+    clipes = [pasta_job / f"{i + 1}.mp4" for i in range(n_cenas)]
     cenas_meta = [
         {
             "numero": i + 1,
@@ -600,7 +648,7 @@ def produzir_video_ultrabatch_500h(
             "acao": f"Cena {i + 1}",
             "palavras": res_cenas[i].get("palavras_alinhadas") or [],
         }
-        for i in range(3)
+        for i in range(n_cenas)
     ]
 
     t0_nvenc = time.time()
