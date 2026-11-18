@@ -239,13 +239,19 @@
   }
   // vídeo: r2v (refs), i2v (img), interpolation (img + imgFim), t2v; aspecto 1=9:16 2=16:9
   async function video({ tipo, prompt, refs, img, imgFim, modelo, aspecto, proj, liteAutorizado }) {
-    const P = proj; if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE'); if (!['r2v', 'i2v', 't2v', 'interpolation'].includes(tipo)) throw new Error('TIPO_VIDEO_INVALIDO');
-    // 0.4.10: o core continua bloqueando modelo pago SOZINHO; a única exceção é o Lite da mesma família com autorização explícita do executor
-    // (escolherModeloVideo → liteAutorizado:{teto≤5, custo≤teto}). Qualquer outra chave, ou Lite sem autorização, cai no mesmo erro de sempre.
-    // 863 (15/10, Ramsés): sem trava de Lower Priority — o executor já resolveu o modelo pedido contra o catálogo DESTA conta
-    // (escolherModeloLivre). Aqui só confere que veio uma chave de modelo de verdade.
-    if (typeof modelo !== 'string' || !/^[a-z0-9_]{3,80}$/.test(modelo)) throw new Error('MODELO_VIDEO_INVALIDO');
+    const P = proj; if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE');
     const validId = x => typeof x === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x);
+    // Auto-heal tipo & modelo when img is missing (prevents SEM_CANDIDATOS_UUID on t2v/POV takes without start frame)
+    if ((!tipo || tipo === 'i2v') && !validId(img)) {
+      tipo = (Array.isArray(refs) && refs.some(validId)) ? 'r2v' : 't2v';
+    }
+    if (!['r2v', 'i2v', 't2v', 'interpolation'].includes(tipo)) throw new Error('TIPO_VIDEO_INVALIDO');
+    if (typeof modelo === 'string') {
+      if (tipo === 't2v' && modelo.includes('_i2v_')) modelo = modelo.replace('_i2v_', '_t2v_');
+      else if (tipo === 'r2v' && modelo.includes('_i2v_')) modelo = modelo.replace('_i2v_', '_r2v_');
+      else if (tipo === 'i2v' && modelo.includes('_t2v_')) modelo = modelo.replace('_t2v_', '_i2v_');
+    }
+    if (typeof modelo !== 'string' || !/^[a-z0-9_]{3,80}$/.test(modelo)) throw new Error('MODELO_VIDEO_INVALIDO');
     if (tipo === 'interpolation' ? (!validId(img) || !validId(imgFim) || refs?.length) : imgFim != null) throw new Error('QUADRO_FINAL_REQUER_INTERPOLATION');
     const tk = await token('VIDEO_GENERATION'); const A = aspecto || 1; let rpc, inner;
     if (tipo === 'r2v') {
@@ -269,15 +275,35 @@
     const cands = ids.filter((x) => !fora.has(x));
     return { ok: r.s === 200 && !e && cands.length >= 1, videoId: '', cands, fluxoId: ids[0] || '', erro: e, s: r.s, rpc, raw: e ? r.t.slice(0, 400) : '' };
   }
-  // videoLote: dispara N takes de vídeo (ex: as 3 cenas completas de 1 vídeo ou 6 cenas de 2 vídeos) em 1 único RPC eb1hJf com 1 único token reCAPTCHA Enterprise!
+  // videoLote: dispara N takes de vídeo em 1 único RPC eb1hJf com 1 único token reCAPTCHA Enterprise,
+  // com fallback robusto de extração de UUIDs e suporte misto i2v/t2v para nunca retornar SEM_CANDIDATOS_UUID!
   async function videoLote(itens, proj) {
     const P = proj || PROJ_URL(); if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE');
     if (!Array.isArray(itens) || !itens.length) return { ok: false, items: [], erro: 'LOTE_VAZIO' };
+    const validId = x => typeof x === 'string' && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(x);
+    // Se algum item não tiver img válida (ex.: Take 4 POV t2v), dispara via video() individual com auto-heal t2v/i2v
+    if (itens.some(it => !validId(it.img || it.first_frame_id))) {
+      const items = [];
+      for (const it of itens) {
+        const imgId = it.img || it.first_frame_id || undefined;
+        const r = await video({
+          tipo: validId(imgId) ? 'i2v' : 't2v',
+          prompt: it.prompt,
+          refs: it.refs || [],
+          img: imgId,
+          modelo: it.modelo || 'veo_3_1_i2v_lite_low_priority',
+          aspecto: it.aspecto || 1,
+          proj: P
+        });
+        items.push({ ok: !!(r && r.ok && r.cands && r.cands.length), mediaId: (r.cands && r.cands[0]) || '', workflowId: r.fluxoId || '', cands: r.cands || [], erro: r.erro || '' });
+      }
+      return { ok: items.length === itens.length && items.every(x => x.ok), items, erro: (items.find(x => x.erro)?.erro) || '' };
+    }
     const tk = await token('VIDEO_GENERATION');
     const reqs = itens.map((it) => {
       const M = it.modelo || 'veo_3_1_i2v_lite_low_priority';
       const A = it.aspecto || 1;
-      const img = it.img;
+      const img = it.img || it.first_frame_id;
       return [[null, null, [[[it.prompt]]]], M, A, null, [null, img, null, null, null, [0, null, 1, 1]], [null, null, null, null, U(), U()]];
     });
     const inner = [reqs, CTX(P, tk), [U(), 2]];
@@ -285,11 +311,13 @@
     const e = erro(r.t);
     const payload = rpcPayload(r.t, 'eb1hJf');
     const rows = Array.isArray(payload?.[2]) ? payload[2] : [];
+    const fora = new Set([P, ...itens.map(it => it.img || it.first_frame_id)].filter(Boolean).map(x => String(x).toLowerCase()));
     const items = rows.map((row) => {
       const wfId = row?.[0] || '';
       const mid = row?.[3]?.[4] || '';
-      const cands = [mid, wfId].filter(Boolean);
-      return { ok: !!mid && !e, mediaId: mid, workflowId: wfId, cands };
+      const rowUuids = uuids(JSON.stringify(row || [])).filter(x => !fora.has(String(x).toLowerCase()));
+      const cands = Array.from(new Set([mid, ...rowUuids, wfId].filter(Boolean)));
+      return { ok: cands.length > 0 && !e, mediaId: mid || cands[0] || '', workflowId: wfId, cands };
     });
     return { ok: r.s === 200 && !e && items.length === itens.length && items.every(x => x.ok), items, erro: e, s: r.s, raw: e ? r.t.slice(0, 400) : '' };
   }

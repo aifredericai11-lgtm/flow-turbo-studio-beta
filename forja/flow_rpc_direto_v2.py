@@ -1044,26 +1044,42 @@ def gerar_video_rpc(
     lf_local = _garantir_ref_na_conta(last_frame_id, u) if last_frame_id else None
     refs_local = [_garantir_ref_na_conta(r_id, u) for r_id in (refs or []) if r_id]
 
+    # Auto-heal tipo & modelo se o take não tiver imagem inicial (ex.: Take 4 POV Text-to-Video t2v)
+    if tipo == "i2v" and not ff_local:
+        tipo = "r2v" if refs_local else "t2v"
+
     if tipo == "i2v":
         if modelo == "veo_3_1_i2v_lite_low_priority":
-            modelos_tentativa = ["veo_3_1_i2v_lite_low_priority"]
+            modelos_tentativa = ["veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite"]
         elif modelo and modelo.startswith("macaron_cookie_"):
             modelos_tentativa = [modelo]
         elif modelo and (modelo.startswith("abra_") or modelo.startswith("omni_")):
             modelos_tentativa = [modelo, "abra_i2v_8s"]
             modelos_tentativa = list(dict.fromkeys(modelos_tentativa))
         else:
-            modelos_tentativa = [modelo or "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite_low_priority"]
+            modelos_tentativa = [modelo or "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite_low_priority", "veo_3_1_i2v_lite"]
             modelos_tentativa = list(dict.fromkeys(modelos_tentativa))
+    elif tipo == "t2v":
+        mod_t2v = (modelo or "veo_3_1_t2v_lite_low_priority").replace("_i2v_", "_t2v_")
+        modelos_tentativa = list(dict.fromkeys([mod_t2v, "veo_3_1_t2v_lite_low_priority", "veo_3_1_t2v_lite"]))
+    elif tipo == "r2v":
+        mod_r2v = (modelo or "veo_3_1_r2v_lite_low_priority").replace("_i2v_", "_r2v_")
+        modelos_tentativa = list(dict.fromkeys([mod_r2v, "veo_3_1_r2v_lite_low_priority", "veo_3_1_r2v_lite"]))
     else:
         modelos_tentativa = [modelo]
+
+    core_js = EXT_DIR / "flow-core.js"
+    core_code = core_js.read_text(encoding="utf-8") if core_js.exists() else ""
 
     res = None
     for _att_traffic in range(4):
         _cadenciar_disparo_nao_bloqueante(0.45, cdp_url=u)
         res = _eval_flow_js_paralelo(
-            """async ({ tipo, prompt, refs, img, imgFim, modelos, aspecto }) => {
-                const c = window.__zerumCandidateCoreV1;
+            """async ({ tipo, prompt, refs, img, imgFim, modelos, aspecto, coreCode }) => {
+                let c = window.__zerumCandidateCoreV1;
+                if ((!c || c.v !== '0.5.1-ultrabatch') && coreCode) {
+                    try { eval(coreCode); c = window.__zerumCandidateCoreV1; } catch (e) {}
+                }
                 if (!c) return { ok: false, erro: 'CORE_NAO_INJETADO' };
                 const info = c.info();
                 let ultimo = null;
@@ -1096,35 +1112,46 @@ def gerar_video_rpc(
                 "imgFim": lf_local,
                 "modelos": modelos_tentativa,
                 "aspecto": aspecto,
+                "coreCode": core_code,
             },
             cdp_url=u,
             timeout_s=120.0,
         )
 
-        if isinstance(res, dict) and not res.get("ok") and (
-            res.get("erro") == "INCOMUM"
+        tem_cands = isinstance(res, dict) and res.get("ok") and bool(res.get("cands") or res.get("videoId"))
+        if tem_cands:
+            break
+
+        eh_incomum = isinstance(res, dict) and (
+            res.get("erro") in ("INCOMUM", "TRAFEGO")
             or "TOO_MUCH_TRAFFIC" in str(res.get("raw") or "")
             or "UNUSUAL_ACTIVITY" in str(res.get("raw") or "")
-        ):
+        )
+        if eh_incomum:
             ep.cooldown_until = time.time() + 30.0
             ep.last_event = "Cooldown anti-tráfego -> failover p/ outra conta!"
             threading.Thread(target=recarregar_aba_flow_anti_traffic, args=(u,), daemon=True).start()
-            # Failover imediato para outra conta saudável do pool sem perder tempo!
-            outras = [
-                c_u for c_u in listar_contas_flow_ativas()
-                if c_u != u and _get_ep(c_u).cooldown_until < time.time() and (not exige_omni or not c_u.endswith(":9225"))
-            ]
-            if outras:
-                u = outras[next(_RR_COUNTER) % len(outras)]
-                ep = _get_ep(u)
-                ff_local = _garantir_ref_na_conta(first_frame_id, u) if first_frame_id else None
-                lf_local = _garantir_ref_na_conta(last_frame_id, u) if last_frame_id else None
-                refs_local = [_garantir_ref_na_conta(r_id, u) for r_id in (refs or []) if r_id]
-                time.sleep(0.5)
-                continue
-            time.sleep(3.0)
+        elif _att_traffic >= 2:
+            # Se falhou 2x sem candidatos na mesma conta (ex.: fila Lower Priority cheia com 3 takes ativos ou projeto travado), rotaciona!
+            threading.Thread(target=recarregar_aba_flow_anti_traffic, args=(u, True), daemon=True).start()
+
+        # Failover para outra conta saudável do pool (ou aguarda vaga na fila Lower Priority se só houver 1 conta)
+        outras = [
+            c_u for c_u in listar_contas_flow_ativas()
+            if c_u != u and _get_ep(c_u).cooldown_until < time.time() and (not exige_omni or not c_u.endswith(":9225"))
+        ]
+        if outras:
+            u = outras[next(_RR_COUNTER) % len(outras)]
+            ep = _get_ep(u)
+            ff_local = _garantir_ref_na_conta(first_frame_id, u) if first_frame_id else None
+            lf_local = _garantir_ref_na_conta(last_frame_id, u) if last_frame_id else None
+            refs_local = [_garantir_ref_na_conta(r_id, u) for r_id in (refs or []) if r_id]
+            time.sleep(0.8)
             continue
-        break
+        time.sleep(3.5)
+        ff_local = _garantir_ref_na_conta(first_frame_id, u) if first_frame_id else None
+        lf_local = _garantir_ref_na_conta(last_frame_id, u) if last_frame_id else None
+        refs_local = [_garantir_ref_na_conta(r_id, u) for r_id in (refs or []) if r_id]
 
     if isinstance(res, dict):
         res["cdp_url"] = u
@@ -1307,11 +1334,38 @@ def gerar_videos_lote_rpc(
         break
     if isinstance(res, dict):
         res["cdp_url"] = u
-        for it_r in res.get("items") or []:
-            if isinstance(it_r, dict):
+        itens_ret = list(res.get("items") or [])
+        # Auto-heal: se o lote tinha 4 takes (ex.: Take 4 em V08) e o Flow devolveu apenas 3 ou algum veio sem cands,
+        # dispara automaticamente os takes faltantes via gerar_video_rpc (com auto-failover/t2v/i2v) para NUNCA dar SEM_CANDIDATOS_UUID!
+        while len(itens_ret) < len(itens):
+            itens_ret.append({"ok": False, "cands": []})
+        for idx_it, it_orig in enumerate(itens):
+            it_r = itens_ret[idx_it] if isinstance(itens_ret[idx_it], dict) else {"ok": False, "cands": []}
+            c_ids = list(it_r.get("cands") or ([it_r["mediaId"]] if it_r.get("mediaId") else []))
+            if not c_ids:
+                raw_img_i = it_orig.get("img") or it_orig.get("first_frame_id")
+                r_single = gerar_video_rpc(
+                    prompt=str(it_orig.get("prompt") or ""),
+                    first_frame_id=str(raw_img_i) if raw_img_i else None,
+                    refs=it_orig.get("refs"),
+                    modelo=str(it_orig.get("modelo") or modelo),
+                    tipo="i2v" if raw_img_i else "t2v",
+                    aspecto=int(it_orig.get("aspecto") or aspecto or 1),
+                    cdp_url=cdp_url,
+                )
+                c_single = list(r_single.get("cands") or [])
+                it_r = {
+                    "ok": bool(r_single.get("ok") and c_single),
+                    "mediaId": c_single[0] if c_single else "",
+                    "cands": c_single,
+                    "cdp_url": r_single.get("cdp_url") or u,
+                }
+                itens_ret[idx_it] = it_r
+            else:
                 it_r["cdp_url"] = u
-                c_ids = list(it_r.get("cands") or ([it_r["mediaId"]] if it_r.get("mediaId") else []))
                 _registrar_midia_na_conta([str(x) for x in c_ids if x], u)
+        res["items"] = itens_ret
+        res["ok"] = len(itens_ret) == len(itens) and all(bool(x.get("cands")) for x in itens_ret)
     return res or {"ok": False, "erro": "FALHA_VIDEO_LOTE", "cdp_url": u}
 
 
