@@ -30,7 +30,7 @@ import urllib.request as _ur
 from playwright.sync_api import sync_playwright
 
 CDP_URL_PADRAO = "http://127.0.0.1:9225"
-PORTAS_SCAN_FLOW = tuple(range(9225, 9237))  # Slots 1..12 (:9225 ate :9236)
+PORTAS_SCAN_FLOW = tuple(range(9225, 9237)) + (9333, 9334, 9335, 9336, 9222, 9223)  # Suporta :9225..:9236 e workers :9333/:9334
 CONTAS_JSON_PATH = Path(__file__).resolve().parent / "contas_flow.json"
 EXT_DIR = Path(__file__).resolve().parent.parent / "extensao_flow_rpc"
 
@@ -66,6 +66,7 @@ class _FlowEndpointState:
         self.project_url: str = ""
         self.email: str = ""
         self.creditos_cache: int | None = None
+        self.consecutive_incomum: int = 0
 
 
 _ENDPOINTS_LOCK = threading.Lock()
@@ -295,32 +296,40 @@ def _resolver_cdp_efetivo(cdp_url: str | None, owner_hint_ids: list[str] | None 
 
 def _registrar_midia_na_conta(media_ids: list[str], cdp_url: str, source_file: Path | None = None) -> None:
     u = _norm_cdp(cdp_url)
+    ep = _get_ep(u)
     rp = source_file.resolve() if (source_file and source_file.exists()) else None
     with _MEDIA_LOCK:
         for mid in media_ids:
             if not mid:
                 continue
             _MEDIA_OWNER_CDP[mid] = u
+            _MEDIA_OWNER_CDP[f"{mid}::proj"] = ep.project_url
             if rp is not None:
                 _MEDIA_SOURCE_FILE[mid] = rp
 
 
 def _garantir_ref_na_conta(ref_id: str | None, target_cdp: str) -> str | None:
     """
-    Mágica Multi-Conta: se `ref_id` foi gerado/subido em outra conta (ex.: `orig_s1_id` subido no `main()` na `:9225`),
-    e este worker está rodando na `:9226`, re-sobe automaticamente o arquivo de disco original para a `:9226` (com cache)!
+    Mágica Multi-Conta & Multi-Projeto:
+    Se `ref_id` foi gerado/subido em outra conta OU em um projeto anterior que foi rotacionado por contaminação
+    (`PUBLIC_ERROR_UNUSUAL_ACTIVITY_TOO_MUCH_TRAFFIC`), re-sobe automaticamente o arquivo original de disco
+    para a conta/projeto atual (com cache por `(arquivo, mtime, cdp_url, project_url)`)!
+    Assim o Worker preserva o `1.mp4` já salvo em disco e continua os takes 2, 3 e 4 num projeto novo limpo!
     """
     if not ref_id:
         return ref_id
     u = _norm_cdp(target_cdp)
+    ep = _get_ep(u)
     with _MEDIA_LOCK:
         owner = _MEDIA_OWNER_CDP.get(ref_id)
+        owner_proj = _MEDIA_OWNER_CDP.get(f"{ref_id}::proj") or ""
         src_path = _MEDIA_SOURCE_FILE.get(ref_id)
-    if owner == u or src_path is None or not src_path.exists():
+    mesmo_proj = (not ep.project_url) or (not owner_proj) or (ep.project_url == owner_proj)
+    if (owner == u and mesmo_proj) or src_path is None or not src_path.exists():
         return ref_id
 
     st_mtime = src_path.stat().st_mtime_ns
-    cache_key = (str(src_path), st_mtime, u)
+    cache_key = (str(src_path), st_mtime, f"{u}::{ep.project_url}")
     with _MEDIA_LOCK:
         cached_mid = _FILE_UPLOAD_CACHE.get(cache_key)
     if cached_mid:
@@ -332,6 +341,7 @@ def _garantir_ref_na_conta(ref_id: str | None, target_cdp: str) -> str | None:
         with _MEDIA_LOCK:
             _FILE_UPLOAD_CACHE[cache_key] = new_mid
             _MEDIA_OWNER_CDP[new_mid] = u
+            _MEDIA_OWNER_CDP[f"{new_mid}::proj"] = ep.project_url
             _MEDIA_SOURCE_FILE[new_mid] = src_path
         return new_mid
     return ref_id
@@ -374,13 +384,20 @@ def _cadenciar_disparo_nao_bloqueante(intervalo_s: float = 0.35, cdp_url: str = 
         ep.ultimo_dispatch_ts = time.time()
 
 
-def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO) -> bool:
-    """Recarrega de forma limpa APENAS a conta `cdp_url` afetada por tráfego incomum, sem pausar as demais contas!"""
+def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_projeto: bool = False) -> bool:
+    """
+    Recarrega de forma limpa APENAS a conta `cdp_url` afetada por tráfego incomum, sem pausar as demais contas!
+    Se `forcar_novo_projeto=True` ou se o projeto atual já acumulou >= 2 falhas `INCOMUM` seguidas ("Projeto Contaminado"),
+    abre a home do Flow e cria automaticamente um Novo Projeto limpo (`/project/<NOVO_UUID>`), permitindo que
+    `_garantir_ref_na_conta` re-suba o `frame_1.jpg` salvo em disco para continuar os takes 2, 3 e 4 sem perder o `1.mp4`!
+    """
     import asyncio
     import websockets
 
     u = _norm_cdp(cdp_url)
     ep = _get_ep(u)
+    ep.consecutive_incomum += 1
+    criar_novo_proj = forcar_novo_projeto or (ep.consecutive_incomum >= 2)
     with ep.reload_lock:
         agora = time.time()
         if (agora - ep.ultimo_reload_ts) < 20.0:
@@ -399,15 +416,18 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO) -> bool:
                     or ("labs.google" in str(t.get("url") or "") and "/project/" in str(t.get("url") or ""))
                 )
             ]
-            proj_url = (
+            old_proj_url = (
                 str(flow_tabs[0].get("url"))
                 if flow_tabs
                 else (ep.project_url or "https://flow.google.com/")
             )
-            m_p = re.search(r"/project/([0-9a-fA-F-]{36})", proj_url)
+            m_p = re.search(r"/project/([0-9a-fA-F-]{36})", old_proj_url)
             if m_p:
-                proj_url = f"https://flow.google.com/project/{m_p.group(1)}"
-                ep.project_url = proj_url
+                old_proj_url = f"https://flow.google.com/project/{m_p.group(1)}"
+                if not criar_novo_proj:
+                    ep.project_url = old_proj_url
+
+            proj_url = "https://flow.google.com/" if criar_novo_proj else old_proj_url
 
             req_new = _ur.Request(f"{u}/json/new?about:blank", method="PUT")
             new_t = json.loads(_ur.urlopen(req_new, timeout=5.0).read())
@@ -461,14 +481,35 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO) -> bool:
                                 )
                             )
                         await ws.send(json.dumps({"id": 3, "method": "Page.navigate", "params": {"url": proj_url}}))
-                        await asyncio.sleep(0.6)
+                        await asyncio.sleep(5.5 if criar_novo_proj else 0.6)
+                        if criar_novo_proj:
+                            # Clica automaticamente em "+ New Project" na home do Flow para criar um projeto 100% limpo
+                            js_click_new = """(() => {
+                                const btns = [...document.querySelectorAll('button, a')];
+                                const b = btns.find(el => /new project|novo projeto/i.test((el.innerText || el.getAttribute('aria-label') || '')));
+                                if (b) { b.click(); return 'CLICKED_NEW'; }
+                                return 'NO_BTN';
+                            })()"""
+                            await ws.send(json.dumps({"id": 44, "method": "Runtime.evaluate", "params": {"expression": js_click_new, "returnByValue": True}}))
+                            await asyncio.sleep(4.0)
 
                 try:
                     asyncio.run(_clean_and_navigate())
                 except Exception:
                     pass
 
-            time.sleep(6.5)
+            time.sleep(2.5 if criar_novo_proj else 6.5)
+            try:
+                tabs_after = json.loads(_ur.urlopen(f"{u}/json/list", timeout=3.0).read())
+                for t_a in tabs_after:
+                    u_a = str(t_a.get("url") or "")
+                    m_na = re.search(r"/project/([0-9a-fA-F-]{36})", u_a)
+                    if m_na:
+                        ep.project_url = f"https://flow.google.com/project/{m_na.group(1)}"
+                        ep.consecutive_incomum = 0
+                        break
+            except Exception:
+                pass
             with ep.ws_cache_lock:
                 ep.ws_url_cached = (time.time(), ws_new) if ws_new else None
             return True
@@ -477,6 +518,11 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO) -> bool:
             return False
         finally:
             ep.reload_event.set()
+
+
+def rotacionar_projeto_limpo_flow(cdp_url: str = CDP_URL_PADRAO) -> bool:
+    """Força a criação imediata de um Novo Projeto limpo na conta `cdp_url`, preservando os `.mp4` já baixados."""
+    return recarregar_aba_flow_anti_traffic(cdp_url=cdp_url, forcar_novo_projeto=True)
 
 
 def _obter_ws_url_flow_cached(cdp_url: str = CDP_URL_PADRAO, force_refresh: bool = False) -> str:
@@ -964,6 +1010,7 @@ def gerar_imagem_rpc(
         res["cdp_url"] = u
         if res.get("ok"):
             ep.img_ok_count += 1
+            ep.consecutive_incomum = 0
             ep.last_event = f"Imagem {res.get('modeloUsado', modelo)} OK"
         for m_esg in res.get("esgotados") or []:
             ep.quota_imagem_esgotada.add(str(m_esg))
@@ -1083,6 +1130,7 @@ def gerar_video_rpc(
         res["cdp_url"] = u
         if res.get("ok"):
             ep.vid_ok_count += 1
+            ep.consecutive_incomum = 0
             ep.last_event = f"Vídeo {res.get('modeloUsado', modelo)} disparado OK"
         cands = list(res.get("cands") or res.get("candidatos") or [])
         if res.get("videoId") and res["videoId"] not in cands:
