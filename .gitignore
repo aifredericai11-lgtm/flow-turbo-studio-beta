@@ -2,8 +2,10 @@ __pycache__/
 *.pyc
 .env
 chrome_flow_profile/
+forja/contas_flow.json
 lotes/*
 !lotes/.gitkeep
+lotes_ultrabatch_500h/
 prontos/*
 !prontos/.gitkeep
 virais/*.mp4

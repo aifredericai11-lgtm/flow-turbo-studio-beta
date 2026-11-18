@@ -1,95 +1,124 @@
-# 🚀 Flow Turbo Studio — Beta Tester Edition (Windows & MacBook)
+# 🚀 Flow Turbo Studio — v3.0 UltraBatch Edition (27 Workers/Conta + Pool Multi-Contas + Anti-Unusual Activity)
 
-Motor autônomo de alta velocidade para dissecação de vídeos virais, clonagem estrutural com variação inteligente e geração massiva em lote via **Google Flow (Beluga Image + Veo 3.1 I2V Lite — 0 créditos)** com **Revisor de 3 Juízes** e montagem acelerada por GPU (`h264_nvenc` / `h264_videotoolbox`).
+Motor autônomo de alta concorrência para dissecação de vídeos virais, clonagem estrutural e geração massiva em lote via **Google Flow (BELUGA / Nano Banana 2 + Veo 3.1 I2V Lite Low Priority — 0 créditos + Omni 1.2 Flash)** com **Blindagem Anti-Unusual Activity**, **27 Workers por Conta (escalável para +100 workers em multi-contas)**, **Juiz Visual GPU (`SFace/ResNet50 + MediaPipe`)** e montagem acelerada em 1 passe (`h264_nvenc` / `h264_videotoolbox`).
 
 ---
 
-## ✨ Principais Recursos desta Versão Beta
+## 🔥 O Que Mudou na v3.0 UltraBatch (20+ / 27 Workers & Zero `UNUSUAL_ACTIVITY`)
 
-1. **Motor WebSocket CDP Direto (`forja/flow_rpc_direto.py` + `motor_turbo_cdp_v2.py`)**:
-   - Dispara até **14 chamadas RPC simultâneas na mesma aba do Google Flow** via WebSocket assíncrono (`~0.25s` para 10 disparos concorrentes).
-   - Usa o modelo `veo_3_1_i2v_lite_low_priority` (**0 créditos consumidos por vídeo**).
-   - **Modo Turbo Fixo**: Gera o Quadro 1 e dispara Cena 1, Cena 2 e Cena 3 **100% em paralelo**.
-   - **Suporte Nativo a MacBook (macOS Apple Silicon / Intel) e Windows**:
-     - Web Lock permanente (`navigator.locks.request('flow-turbo-macbook-keepawake', ...)`) em `extensao_flow_rpc/flow-core.js` que impede o **App Nap do macOS** de congelar os XHRs `batchexecute` e o token `reCAPTCHA Enterprise` quando o Chrome está em 2º plano.
-     - Download autenticado dentro do próprio navegador (`c.baixarBase64(url)` via `fetch(url, { credentials: 'include' })`) + contexto SSL tolerante no Python do macOS.
-     - Exposição dupla `window.__zerumCandidateCoreV1` + `window.__FLOW` (`generateImage`, `generateVideo`, `checkStatus`, `uploadImage`).
+1. **WebSocket CDP Assíncrono com 27 Workers por Conta (`forja/flow_rpc_direto.py`)**:
+   - Semáforo ampliado para **`BoundedSemaphore(27)` por conta Chrome** (`:9225..:9236`), mantendo todos os slots de GPU do Google Flow ocupados em janela deslizante contínua.
+   - Com 4 a 6 contas abertas no pool (`gerenciar_contas_flow.py`), opera **100+ takes simultâneos** sem gargalo de CPU ou lock serializado.
+   - Todos os downloads de `.jpg`/`.mp4` (`flow-content.google`) rodam **100% fora do lock CDP**.
 
-2. **Revisor Implacável de 3 Camadas (`forja/qa_clipe.py`)**:
-   - **Juiz 1 (Pré-Animação)**: Audita identidade do personagem, cor da roupa/acessórios, mãos e permanência dos objetos de cena antes de animar.
-   - **Tesoura Fonética de 3 Passes (`faster-whisper`)**: Corta silêncio inicial/final, alucinação de voz no fim do clipe e congelamentos.
-   - **Juiz 3 (Pós-Animação Intra-Clipe)**: Inspeciona `15%`, `55%` e `88%` da linha do tempo do `.mp4` gerado e regrava automaticamente caso algum objeto suma no meio do clipe, a roupa mude, surja texto indesejado ou haja bug de mão/flash.
+2. **UltraBatch 1-Token (`c.imagemLote` e `c.videoLote` em `extensao_flow_rpc/flow-core.js`)**:
+   - O principal gatilho de `UNUSUAL_ACTIVITY` (`INCOMUM`) no Google Flow é pedir dezenas de tokens `grecaptcha.enterprise.execute` seguidos na mesma aba.
+   - `gerar_imagens_lote_rpc` (`c.imagemLote` → RPC `ogiZ0b`) e `gerar_videos_lote_rpc` (`c.videoLote` → RPC `eb1hJf`) empacotam múltiplas imagens ou **3 a 9 cenas de vídeo em 1 única requisição Protobuf**, assinada por **1 único token reCAPTCHA Enterprise** (reduzindo o consumo de tokens em **70% a 85%**).
 
-3. **Edição Dinâmica & Pós-Produção GPU (`edicao/` + `studio_web.py`)**:
-   - **Zero Transições de Flash**: Corte seco dinâmico com **Punch-In `1.11x`** na Cena 2.
-   - **Legendas Karaokê (`Poppins Bold`)** palavra por palavra sincronizadas via Whisper.
-   - **Botão Pop-Up CTA Animado (`COMMENT YES` / customizável)** no terço final do vídeo.
+3. **Poller Central Coalescido (`_consultar_status_video_coalescido` via `jwpduf`)**:
+   - Em vez de 27 threads fazendo polling individual no endpoint `as29s` (`GetMedia`), **1 única requisição `jwpduf` (`BatchCheckAsyncVideoGenerationStatus`) a cada `2.4s`** consulta o status de todos os 27 vídeos simultâneos da conta e notifica todas as threads em memória (`threading.Condition`).
+   - Descarta automaticamente `workflowId`s intermediários para jamais spammar `as29s`.
+
+4. **Pool Multi-Contas (`:9225` a `:9236`) + Ponte Automática de `mediaId` (`_garantir_ref_na_conta`)**:
+   - Gerenciador integrado (`GERENCIAR_CONTAS_FLOW.bat` / `python gerenciar_contas_flow.py`) para abrir e monitorar até 12 instâncias isoladas do Chrome (`FlowProfile`, `FlowProfile_02`..`12`).
+   - Roteador inteligente `escolher_conta_flow(exige_omni=...)`: distribui lotes gratuitos (`veo_3_1_i2v_lite_low_priority`) em **Round-Robin** entre todas as contas saudáveis e direciona pilotos Omni Flash para as contas com saldo de créditos.
+   - **Ponte Automática de `mediaId`**: se um `frame_1` ou matriz foi subido/gerado na Conta 1 (`:9225`) e o worker cair na Conta 2 (`:9226`), `_garantir_ref_na_conta` re-sobe e cacheia automaticamente o arquivo original na Conta 2 sem quebrar a execução.
+
+5. **Purga Cirúrgica Anti-Tráfego + Failover Instantâneo (`recarregar_aba_flow_anti_traffic`)**:
+   - Se qualquer conta receber `INCOMUM` (`UNUSUAL_ACTIVITY` / `TOO_MUCH_TRAFFIC`), ela entra em **cooldown de 30s** e o worker faz **failover imediato (0.5s)** para outra conta saudável do pool.
+   - Em background, a conta afetada abre uma aba limpa, fecha a aba marcada e executa `Storage.clearDataForOrigin` via CDP (limpando `local_storage, session_storage, indexeddb, cache_storage, service_workers` de `flow.google.com`, `google.com`, `gstatic.com` e `labs.google` **sem apagar os cookies de login**), re-injetando `trap-main.js` + `flow-core.js` via `Page.addScriptToEvaluateOnNewDocument` com score reCAPTCHA zerado.
+
+6. **Motor UltraBatch 500 Vídeos/Hora (`forja/motor_500h_ultrabatch.py`) + Juiz Visual GPU (`forja/juiz_visual_gpu.py`)**:
+   - **Tesoura Fonética Zero-Encode**: calcula `(trim_start, duracao_final_s)` via Faster-Whisper GPU sem re-encodar clipes intermediários.
+   - **Fusão NVENC em 1 Único Passe (`montar_video_1_passe_nvenc`)**: corta, concatena, aplica legenda `.ass` / botão CTA e normaliza áudio em `~0.55s` por vídeo.
+   - **Juiz Visual GPU (`forja/juiz_visual_gpu.py`)**: auditoria anti-3º braço, anti-troca de apresentadora (`SFace`/`ResNet50` + `MediaPipe`) e detector OpenCV determinístico anti-barra de UI falsa ou texto queimado no rodapé.
 
 ---
 
 ## 🛠️ Pré-Requisitos (Windows & MacBook)
 
 1. **Python 3.10 ou 3.11+** instalado.
-2. **FFmpeg** instalado no sistema (disponível no `PATH` — no Mac: `brew install ffmpeg`).
+2. **FFmpeg** instalado no sistema (`PATH` — no Mac: `brew install ffmpeg`).
 3. **Google Chrome** instalado.
-4. Conta logada no **Google Flow** (`https://flow.google.com/`).
+4. 1 ou mais contas logadas no **Google Flow** (`https://flow.google.com/`).
 
 ---
 
-## ⚡ Como Iniciar em 3 Passos (Windows ou MacBook)
+## ⚡ Como Iniciar (1 Conta ou Pool Multi-Contas)
 
 ### Passo 1 — Instalar Dependências
-- **Windows:** Dê dois cliques em **`1_INSTALAR_DEPENDENCIAS.bat`** (ou `pip install -r requirements.txt`).
-- **MacBook (M1/M2/M3/M4 ou Intel):**
-  ```bash
-  pip3 install -r requirements.txt
-  ```
+- **Windows:** `1_INSTALAR_DEPENDENCIAS.bat` (ou `pip install -r requirements.txt`)
+- **MacBook / Linux:** `pip3 install -r requirements.txt`
 
-### Passo 2 — Abrir o Chrome com a Extensão Flow RPC (Porta `9225`)
-- **Windows:** Dê dois cliques em **`2_ABRIR_CHROME_FLOW.bat`** (ou `python abrir_chrome_flow.py`).
-- **MacBook:**
-  ```bash
-  python3 abrir_chrome_flow.py
-  ```
-- O Google Chrome abrirá na porta `9225` já com a extensão `./extensao_flow_rpc` carregada, `--user-data-dir` isolado (`./chrome_flow_profile`) e flags anti-App Nap ativas.
-- Faça login na sua conta Google em **`https://flow.google.com/`** e **abra ou crie qualquer projeto** (deixe a aba aberta em `https://flow.google.com/project/<ID>`).
+### Passo 2 — Abrir 1 Conta (`:9225`) ou Pool Multi-Contas (`:9225..:9236`)
+- **Para 1 conta principal (`:9225`):**
+  - Windows: `2_ABRIR_CHROME_FLOW.bat` (ou `python abrir_chrome_flow.py`)
+  - MacBook: `python3 abrir_chrome_flow.py`
+- **Para Pool Multi-Contas (`:9225`, `:9226`, `:9227`, ...):**
+  - Windows: dê dois cliques em **`GERENCIAR_CONTAS_FLOW.bat`**
+  - Terminal (Windows/Mac):
+    ```bash
+    # Abrir slots 1, 2, 3 e 4 (:9225 a :9228) para login:
+    python gerenciar_contas_flow.py --abrir 1 2 3 4
 
-### Passo 3 — Iniciar o Studio Web ou Usar a Camada RPC Direto
-- **Windows:** Dê dois cliques em **`3_INICIAR_STUDIO_BETA.bat`**.
-- **MacBook / Terminal:**
-  ```bash
-  python3 studio_web.py
-  ```
-- O painel abrirá em **`http://localhost:8788`**.
-- Para usar apenas a camada de requisições ao Flow no seu próprio script Python:
+    # Verificar status, e-mail, projeto e saldo de créditos de todas as contas:
+    python gerenciar_contas_flow.py --status
+
+    # Reabrir automaticamente todas as contas salvas no pool:
+    python gerenciar_contas_flow.py --subir-todas
+    ```
+  - Em cada janela aberta, faça login no Google Flow e deixe aberta dentro de um projeto (`https://flow.google.com/project/<ID>`).
+
+### Passo 3 — Usar o Studio Web ou a API Python UltraBatch
+- **Interface Web:** `3_INICIAR_STUDIO_BETA.bat` ou `python studio_web.py` (`http://localhost:8788`)
+- **Exemplo em Python (UltraBatch 1-Token + Multi-Contas Automático):**
   ```python
-  from motor_turbo_cdp_v2 import FlowTurboCDP
+  from forja.flow_rpc_direto import (
+      gerar_imagem_rpc,
+      gerar_videos_lote_rpc,
+      aguardar_midia_rpc,
+  )
 
-  flow = FlowTurboCDP(cdp_port=9225)
-  # 1. Gera imagem BELUGA (0 créditos) e baixa autenticado:
-  mid = flow.gerar_start_frame("Portrait of a doctor in a bright clinic, 9:16", "./frame1.jpg")
-  # 2. Dispara vídeo Veo 3.1 Lite Low Priority (0 créditos) com startFrame:
-  uuids = flow.disparar_video_veo31("She speaks naturally to the camera", mid)
+  # 1. Gera o start frame no BELUGA (roteado automaticamente para uma conta saudável do pool):
+  r_img = gerar_imagem_rpc("Raw iPhone 0.5x vertical 9:16 photo of a nurse in a kitchen", modelo="BELUGA")
+  w_img = aguardar_midia_rpc(r_img, tipo="image", destino_arquivo="./frame_1.jpg")
+  f1_id = w_img["mediaId"]
+
+  # 2. Dispara as 3 cenas de vídeo em 1 ÚNICO RPC eb1hJf com 1 ÚNICO token reCAPTCHA Enterprise:
+  r_lote = gerar_videos_lote_rpc([
+      {"prompt": "Scene 1 action and dialogue...", "img": f1_id},
+      {"prompt": "Scene 2 action and dialogue...", "img": f1_id},
+      {"prompt": "Scene 3 action and dialogue...", "img": f1_id},
+  ], modelo="veo_3_1_i2v_lite_low_priority")
+
+  # 3. Coleta os 3 MP4 usando o Poller Central Coalescido (jwpduf):
+  for idx, item in enumerate(r_lote["items"], start=1):
+      aguardar_midia_rpc(item, tipo="video", destino_arquivo=f"./cena_{idx}.mp4")
   ```
 
 ---
 
-## 📂 Estrutura do Repositório
+## 📂 Estrutura Principal do Repositório
 
 ```text
-├── 1_INSTALAR_DEPENDENCIAS.bat   # Instala bibliotecas Python necessárias (Windows)
-├── 2_ABRIR_CHROME_FLOW.bat       # Abre Chrome na porta 9225 com a extensão (Windows)
-├── abrir_chrome_flow.py          # Abre Chrome na porta 9225 em MacBook / Windows / Linux
-├── 3_INICIAR_STUDIO_BETA.bat     # Inicia a interface web em http://localhost:8788
-├── studio_web.py                 # Servidor Web + Pipeline Completo (Modo Turbo + GPU)
-├── motor_turbo_cdp.py            # Cliente CDP direto v1 (window.__FLOW + __zerumCandidateCoreV1)
-├── motor_turbo_cdp_v2.py         # Cliente CDP direto v2 com anti-Unusual Activity e auto-reload
-├── extensao_flow_rpc/            # Extensão Chrome Manifest V3 (world: MAIN) p/ flow.google.com
-│   ├── manifest.json             # Manifest limpo sem referências órfãs
-│   ├── trap-main.js              # Hook de captura da siteKey reCAPTCHA Enterprise
-│   └── flow-core.js              # Motor RPC batchexecute + WebLock Anti-App Nap + window.__FLOW
-├── forja/
-│   ├── flow_rpc_direto.py        # Cliente WebSocket CDP paralelo (14 slots simultâneos)
-│   └── qa_clipe.py               # Revisor de 3 Camadas (Juiz 1 + Tesoura 3 Passes + Juiz 3)
-└── prontos/                      # Pasta onde os vídeos finais verificados são entregues
+├── 1_INSTALAR_DEPENDENCIAS.bat        # Instala bibliotecas Python necessárias
+├── 2_ABRIR_CHROME_FLOW.bat            # Abre Chrome principal na porta :9225 com a extensão
+├── 3_INICIAR_STUDIO_BETA.bat          # Inicia o Studio Web em http://localhost:8788
+├── GERENCIAR_CONTAS_FLOW.bat          # Painel interativo do Pool Multi-Contas (:9225..:9236)
+├── gerenciar_contas_flow.py           # CLI/Gerenciador do Pool Multi-Contas Google Flow
+├── abrir_chrome_flow.py               # Inicializador multiplataforma (MacBook / Windows / Linux)
+├── studio_web.py                      # Servidor Web + Pipeline Completo (Modo Turbo + GPU)
+├── motor_turbo_cdp.py                 # Cliente CDP direto v1 (legado)
+├── motor_turbo_cdp_v2.py              # Wrapper v3.0 UltraBatch & Multi-Contas compatível com v2
+├── extensao_flow_rpc/                 # Extensão Chrome Manifest V3 (world: MAIN)
+│   ├── manifest.json                  # Manifest V3 para flow.google.com e labs.google
+│   ├── trap-main.js                   # Armadilha document_start que preserva o execute original do reCAPTCHA
+│   └── flow-core.js                   # Core v0.5.1-ultrabatch (imagemLote, videoLote, jwpduf, WebLock)
+└── forja/
+    ├── flow_rpc_direto.py             # Motor Multi-Contas (27 workers/conta + ponte mediaId + poller jwpduf)
+    ├── motor_500h_ultrabatch.py       # Esteira 500 vídeos/h (Janela deslizante 27 slots + NVENC 1-passe)
+    ├── juiz_visual_gpu.py             # Juiz Visual GPU (SFace/ResNet50 + MediaPipe anti-defeito e unicidade)
+    ├── qa_clipe.py                    # Tesoura Fonética 3 Passes (Faster-Whisper GPU) + Revisor 3 Camadas
+    ├── compilador_realismo_zerum.py   # Compilador óptico de realismo smartphone 0.5x/24mm
+    └── diretor_realismo_pastel_euojeff.py # Diretor de Realismo Pastel + JSON de Física Biomecânica Causal
 ```

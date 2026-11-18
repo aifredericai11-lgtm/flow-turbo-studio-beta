@@ -5,7 +5,7 @@
   const protocol = 'zerum-candidate-core-v1';
   if (window.__zerumCandidateCoreV1) {
     if (window.__zerumCandidateCoreV1.protocol !== protocol) throw new Error('CORE_CANDIDATA_INCOMPATIVEL');
-    return;
+    if (window.__zerumCandidateCoreV1.v === '0.5.1-ultrabatch') return;
   }
   const U = () => crypto.randomUUID().toUpperCase();
   const SEED = () => Math.floor(Math.random() * 2147483647);
@@ -18,7 +18,7 @@
   const erro = (t) => {
     if (t.indexOf('UNUSUAL_ACTIVITY') !== -1 || /recaptcha evaluation failed/i.test(t)) return 'INCOMUM';
     const m = t.match(/PUBLIC_ERROR_[A-Z_]+/); if (m) return m[0];
-    if (/PER_MODEL_DAILY_QUOTA|QUOTA/i.test(t)) return 'COTA';
+    if (/PER_MODEL_DAILY_QUOTA|DAILY_QUOTA_REACHED|QUOTA_EXCEEDED/i.test(t)) return 'COTA';
     if (/TOO_MUCH_TRAFFIC|RESOURCE_EXHAUSTED/.test(t)) return 'TRAFEGO';
     return '';
   };
@@ -215,6 +215,28 @@
     const ids = uuids(r.t); const mid = (url.match(/image\/([0-9a-f-]{36})/) || [])[1] || ids[0] || '';
     return { ok: r.s === 200 && !e && !!mid, cands: ids.filter(x => ![P, ...(refs || [])].map(x => String(x).toLowerCase()).includes(x)), mediaId: url ? mid : '', url, erro: e, s: r.s, raw: e ? r.t.slice(0, 400) : '' };
   }
+  // imagemLote: dispara N imagens diferentes em 1 único RPC ogiZ0b com 1 único token reCAPTCHA Enterprise!
+  async function imagemLote(itens, proj) {
+    const P = proj || PROJ_URL(); if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE');
+    if (!Array.isArray(itens) || !itens.length) return { ok: false, items: [], erro: 'LOTE_VAZIO' };
+    const tk = await token('IMAGE_GENERATION');
+    const Fs = itens.map((it) => {
+      const refs = it.refs || [];
+      const rs = refs.length ? refs.map((x) => [x, null, null, null, 1]) : null;
+      return [null, null, rs, SEED(), it.aspecto || 2, it.modelo || 'BELUGA', null, CTX(P, tk), [[[it.prompt]]], null, null, null, U(), U()];
+    });
+    const r = await batch('ogiZ0b', [null, Fs, 1, CTX(P, tk), [U()]], P);
+    const e = erro(r.t);
+    const payload = rpcPayload(r.t, 'ogiZ0b');
+    const rows = Array.isArray(payload?.[0]) ? payload[0] : [];
+    const items = rows.map((row) => {
+      const mid = row?.[0] || '';
+      const rawRow = clean(JSON.stringify(row || []));
+      const url = (rawRow.match(/https?:\/\/flow-content\.google\/image\/[^"\s\\]+/) || [])[0] || '';
+      return { ok: !!mid && !e, mediaId: mid, url, cands: mid ? [mid] : [] };
+    });
+    return { ok: r.s === 200 && !e && items.length === itens.length && items.every(x => x.ok), items, erro: e, s: r.s, raw: e ? r.t.slice(0, 400) : '' };
+  }
   // vídeo: r2v (refs), i2v (img), interpolation (img + imgFim), t2v; aspecto 1=9:16 2=16:9
   async function video({ tipo, prompt, refs, img, imgFim, modelo, aspecto, proj, liteAutorizado }) {
     const P = proj; if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE'); if (!['r2v', 'i2v', 't2v', 'interpolation'].includes(tipo)) throw new Error('TIPO_VIDEO_INVALIDO');
@@ -246,6 +268,30 @@
     const fora = new Set([P, img, imgFim, ...(refs || [])].filter(Boolean).map((x) => String(x).toLowerCase()));
     const cands = ids.filter((x) => !fora.has(x));
     return { ok: r.s === 200 && !e && cands.length >= 1, videoId: '', cands, fluxoId: ids[0] || '', erro: e, s: r.s, rpc, raw: e ? r.t.slice(0, 400) : '' };
+  }
+  // videoLote: dispara N takes de vídeo (ex: as 3 cenas completas de 1 vídeo ou 6 cenas de 2 vídeos) em 1 único RPC eb1hJf com 1 único token reCAPTCHA Enterprise!
+  async function videoLote(itens, proj) {
+    const P = proj || PROJ_URL(); if (!P || P !== PROJ_URL()) throw new Error('PROJETO_DIVERGENTE');
+    if (!Array.isArray(itens) || !itens.length) return { ok: false, items: [], erro: 'LOTE_VAZIO' };
+    const tk = await token('VIDEO_GENERATION');
+    const reqs = itens.map((it) => {
+      const M = it.modelo || 'veo_3_1_i2v_lite_low_priority';
+      const A = it.aspecto || 1;
+      const img = it.img;
+      return [[null, null, [[[it.prompt]]]], M, A, null, [null, img, null, null, null, [0, null, 1, 1]], [null, null, null, null, U(), U()]];
+    });
+    const inner = [reqs, CTX(P, tk), [U(), 2]];
+    const r = await batch('eb1hJf', inner, P);
+    const e = erro(r.t);
+    const payload = rpcPayload(r.t, 'eb1hJf');
+    const rows = Array.isArray(payload?.[2]) ? payload[2] : [];
+    const items = rows.map((row) => {
+      const wfId = row?.[0] || '';
+      const mid = row?.[3]?.[4] || '';
+      const cands = [mid, wfId].filter(Boolean);
+      return { ok: !!mid && !e, mediaId: mid, workflowId: wfId, cands };
+    });
+    return { ok: r.s === 200 && !e && items.length === itens.length && items.every(x => x.ok), items, erro: e, s: r.s, raw: e ? r.t.slice(0, 400) : '' };
   }
   // texto (Gemini do Flow, o mesmo do kit da ferramenta): RPC agJzFb, token TEXT_GENERATION. partes = [{mime, b64}] (imagem/vídeo pequeno)
   async function texto({ prompt, sistema, partes, modelo, proj }) {
@@ -339,12 +385,13 @@
     for (let i = 0; i < bytes.length; i += 32768) {
       bin += String.fromCharCode(...bytes.subarray(i, i + 32768));
     }
-    return { ok: true, s: 200, base64: btoa(bin), mimeType: r.headers.get('content-type') || '' };
+    const b64 = btoa(bin);
+    return { ok: true, s: 200, base64: b64, b64, mimeType: r.headers.get('content-type') || '' };
   }
-  const coreObj = { protocol, v: '0.4', bind, info, credito, catalogo, catalogoImagem, token, batch, subir, imagem, video, status, texto, baixarBase64 };
+  const coreObj = { protocol, v: '0.5.1-ultrabatch', bind, info, credito, catalogo, catalogoImagem, token, batch, subir, imagem, imagemLote, video, videoLote, status, texto, baixarBase64 };
   window.__zerumCandidateCoreV1 = coreObj;
 
-  // Bridge universal window.__FLOW para compatibilidade total com motor_turbo_cdp.py (v1) e motor_turbo_cdp_v2.py (v2)
+  // Bridge universal window.__FLOW para compatibilidade total com motor_turbo_cdp.py (v1) e motor_turbo_cdp_v2.py (v2/v3)
   window.__FLOW = {
     core: coreObj,
     info: () => info(),
@@ -354,6 +401,12 @@
       const mimeMatch = String(b64DataUrl || '').match(/^data:([^;]+);base64,/);
       const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       return await subir(rawB64, mime, nome, p);
+    },
+    generateImageBatch: async (itens) => {
+      return await imagemLote(itens, PROJ_URL());
+    },
+    generateVideoBatch: async (itens) => {
+      return await videoLote(itens, PROJ_URL());
     },
     generateImage: async (prompt, count = 1, model = 'BELUGA', ratio = '9:16', refs = []) => {
       const p = PROJ_URL();

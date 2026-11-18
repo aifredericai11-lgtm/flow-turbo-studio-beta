@@ -1,7 +1,7 @@
 """
-Compilador Determinístico de Realismo, Física, Voz (Hz), Animação, Juízes e Tesoura (Padrão Flow Studio).
+Compilador Determinístico de Realismo, Física, Voz (Hz), Animação, Juízes e Tesoura (Padrão Zerum 001).
 
-Extraído e portado 1:1 da interceptação AO VIVO do ciclo completo de geração no FlowStudio
+Extraído e portado 1:1 da interceptação AO VIVO do ciclo completo de geração no Zerum
 (`zerum-build:20261024T1400-estagios24-783315d`, lotes reais `L-PENSANTE-dde74994-6645959D` e `L-PENSANTE-2192d1a5-6645959D`):
 
 1. `QUADRO_PROMPT_18 + DUAL_REF_LOCK (quadroRefs18)`:
@@ -38,10 +38,10 @@ import re
 from typing import Any
 
 LEI_REALISMO_PESSOA = (
-    "UNPROCESSED RAW SMARTPHONE FOOTAGE (iPhone 15 Pro 0.5x Ultra-Wide 14mm-16mm lens with subtle barrel fisheye perspective, slightly elevated 12-to-15-degree high-angle view looking slightly down at the full countertop/tabletop surface, natural Rec.709 color science, zero beauty filter, zero AI plastic smoothing, zero portrait bokeh): "
-    "Vertical 9:16 candid home/clinical phone framing where both the ceiling/upper cabinets and the entire foreground tabletop surface fit in frame with razor-sharp infinite deep focus from 30cm to the back wall. "
-    "FOREGROUND LOOMING & PHYSICALLY ACCURATE SURFACE REFLECTIONS: objects on the lower foreground counter/tabletop (baking soda carton, glass bowl, lemon, pitcher) appear 30% larger and closer to the bottom edge of the wide-angle lens, with real mirror-like specular light reflections and caustics on the polished stone/granite/steel surface. "
-    "Authentic human skin subsurface scattering, visible pores, subtle natural T-zone sheen/oiliness on forehead, nose and skin, and a lived-in everyday American background (not overly sterile or artificial). "
+    "UNPROCESSED RAW SMARTPHONE FOOTAGE & @euojeff PASTEL REALISM LAW (Front-facing smartphone propped on countertop ~24mm lens, deep depth of field where background kitchen/home objects remain recognizable, zero portrait bokeh, zero beauty filter, zero AI plastic smoothing): "
+    "STRICT PASTEL & DESATURATED COLOR PALETTE (Sat mean <= 55): muted sage-olive, washed dusty rose, soft oatmeal beige, faded slate blue-gray, matte off-white walls, zero vibrant or neon AI colors. "
+    "OPTICAL LIGHTING & BARE SKIN: slightly overexposed round overhead ceiling light fixture visible near the top casting natural indoor light; 100% bare skin with zero makeup, visible pores, subtle under-eye circles, real horizontal forehead lines when raising brows, subtle natural T-zone sheen, and casual tied-back hair with stray flyaway strands around the temples. "
+    "Lived-in everyday domestic background with real objects showing physical signs of use (e.g., glass mixing bowl with smeared paste residue on the inner glass wall). "
     "ONE single photograph filling the whole frame — never a grid, collage, split screen, panels or multiple moments."
 )
 
@@ -86,11 +86,73 @@ LEI_ANATOMIA_MAOS = (
 )
 
 CRITICAL_SHOT_RULE_PESSOA = (
-    "Locked shot, no camera move, no cut. Unprocessed raw phone camera footage with natural specular reflections on the polished countertop stone and real light caustics. "
+    "Single continuous take, no internal cut. Unprocessed raw phone camera footage filmed by a real person holding a smartphone (authentic DTC cameraman feel with natural handheld breathing sway and smooth optical zoom). "
     "For the whole clip: the same person (face, hair, body build, skin), the same clothes/accessories, the same place, the same light, and the EXACT SAME containers and props on the countertop as in the reference image; "
     "never morph, duplicate or swap containers during the clip; nobody else in the frame. "
     "Clean picture for the whole clip: strictly NO on-screen text, NO subtitles, NO captions, NO social media UI, NO comment box overlay, and NO icons appear at any point; only the filmed scene with existing package labels unchanged."
 )
+
+DIRECAO_CAMERA_DTC_CENA_1 = (
+    "DTC CAMERAMAN ZOOM DIRECTION (HOOK ZOOM-IN 1.00x -> 1.95x): "
+    "Filmed handheld by someone holding a smartphone in front of the counter; starts in a medium-wide 1.00x framing showing the speaker, the baking soda carton, and the demonstration prop, "
+    "then after 0.5 seconds the cameraman smoothly zooms the lens in (1.00x to 1.95x optical handheld zoom-in with subtle natural human sway) directly onto the demonstration target and the speaker's pointing/squeezing gloved hands."
+)
+
+DIRECAO_CAMERA_DTC_CENA_2 = (
+    "DTC CAMERAMAN ZOOM DIRECTION (RESET 1.00x + HAND-TRACKING ZOOM 1.00x -> 1.55x): "
+    "Starts reset back at medium-wide 1.00x framing, then as the speaker demonstrates the mechanism or mixes the ingredients on the countertop, "
+    "the handheld smartphone cameraman smoothly pans and zooms in (1.00x to 1.55x) tracking the hands, spoon, and anatomical/tabletop action."
+)
+
+DIRECAO_CAMERA_DTC_CTA = (
+    "DTC CAMERAMAN ZOOM DIRECTION (EYE-TO-EYE + CTA REFRAME 1.25x -> 1.05x): "
+    "Filmed handheld at chest-to-eye level with subtle human breathing motion; starts in a tight 1.25x framing on the speaker holding/drinking the glass, "
+    "then subtly reframes/zooms out slightly (1.25x to 1.05x) as the speaker points downward toward the comment section."
+)
+
+POOL_AVATARES_ROLETAGEM_INTELIGENTE: tuple[dict[str, str], ...] = (
+    {
+        "tipo": "mulher_enfermeira_1",
+        "sexo": "f",
+        "desc_en": "a warm, authoritative 48-year-old American female registered nurse with shoulder-length chestnut hair tied back, natural skin texture, wearing medical scrubs and a clinical stethoscope around her neck",
+    },
+    {
+        "tipo": "mulher_enfermeira_2",
+        "sexo": "f",
+        "desc_en": "a seasoned, empathetic 54-year-old American female clinical nurse practitioner with silver-streaked blonde hair in a neat bun, realistic facial lines, wearing medical scrubs and a stethoscope draped over her shoulders",
+    },
+    {
+        "tipo": "mulher_enfermeira_3",
+        "sexo": "f",
+        "desc_en": "a trustworthy 45-year-old African-American female senior nurse with neat braided hair, warm expressive eyes, natural skin pores, wearing medical scrubs and a stethoscope around her neck",
+    },
+    {
+        "tipo": "anciao_japones",
+        "sexo": "m",
+        "desc_en": "an authoritative 70-year-old elderly Japanese holistic medical specialist and senior nurse (Dr. Kenji Sato) with neatly combed silver-white hair, wise expressive eyes, authentic aged facial texture, wearing medical scrubs and a clinical stethoscope around his neck",
+    },
+    {
+        "tipo": "homem_enfermeiro",
+        "sexo": "m",
+        "desc_en": "an experienced 52-year-old American male senior registered nurse with salt-and-pepper short hair and neatly trimmed beard, realistic skin texture, wearing medical scrubs and a clinical stethoscope around his neck",
+    },
+)
+
+
+def sortear_avatar_roletagem(idx: int, modo: str = "padrao_3_1_1") -> dict[str, str]:
+    """
+    Roletagem inteligente de avatares baseada nas views da rede:
+    - `padrao_3_1_1` (60% Mulher Enfermeira / 20% Ancião Japonês / 20% Homem Enfermeiro)
+    - `ciclo_1_1_1` (1 Mulher Enfermeira x 1 Ancião Japonês x 1 Homem Enfermeiro)
+    """
+    if modo == "ciclo_1_1_1":
+        ciclo = (
+            POOL_AVATARES_ROLETAGEM_INTELIGENTE[0],
+            POOL_AVATARES_ROLETAGEM_INTELIGENTE[3],
+            POOL_AVATARES_ROLETAGEM_INTELIGENTE[4],
+        )
+        return ciclo[idx % 3]
+    return POOL_AVATARES_ROLETAGEM_INTELIGENTE[idx % len(POOL_AVATARES_ROLETAGEM_INTELIGENTE)]
 
 CRITICAL_SHOT_RULE_MAOS = (
     "CRITICAL SHOT RULE: this is ONE single continuous locked overhead take. "
@@ -259,7 +321,7 @@ def compilar_quadro_refs_18(
     cena1_aprovada_media_id: str | None = None,
 ) -> list[str]:
     """
-    Implementa `quadroRefs18` capturado ao vivo no FlowStudio:
+    Implementa `quadroRefs18` capturado ao vivo no Zerum:
     - Cena 1 (`indice_cena == 0`): `[avatar_media_id]` (1 referência)
     - Cena 2+ (`indice_cena >= 1`): `[avatar_media_id, cena1_aprovada_media_id]` (Dupla referência:
       Foto 1 trava rosto/cabelo/idade; Foto 2 trava roupa/acessórios/cenário/luz da Cena 1 aprovada).
@@ -510,8 +572,15 @@ def enriquecer_prompt_video_se_necessario(
     if prefixo_fala and not p.lower().startswith(f"the {ator} in the reference image says in english:"):
         p = f"{prefixo_fala} {p.lstrip()}"
 
-    if "Locked shot, no camera move, no cut" not in p:
+    if "Single continuous take, no internal cut" not in p and "Locked shot, no camera move" not in p:
         p = f"{p.rstrip('. ')}. {CRITICAL_SHOT_RULE_PESSOA}"
+    if "DTC CAMERAMAN ZOOM DIRECTION" not in p:
+        if cta or indice_cena >= 2:
+            p = f"{p.rstrip('. ')}. {DIRECAO_CAMERA_DTC_CTA}"
+        elif indice_cena == 0:
+            p = f"{p.rstrip('. ')}. {DIRECAO_CAMERA_DTC_CENA_1}"
+        else:
+            p = f"{p.rstrip('. ')}. {DIRECAO_CAMERA_DTC_CENA_2}"
     if cta and CTA_LAW_VIDEO not in p:
         p = f"{p.rstrip('. ')}. {CTA_LAW_VIDEO}"
     if "[VOICE]" not in p:

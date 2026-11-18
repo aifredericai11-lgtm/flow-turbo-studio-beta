@@ -1,0 +1,27 @@
+{
+  "atualizado_em": "2026-11-18T12:00:00",
+  "contas": [
+    {
+      "slot": 1,
+      "porta": 9225,
+      "cdp_url": "http://127.0.0.1:9225",
+      "profile_dir": "C:\\Users\\SEU_USUARIO\\AppData\\Local\\Google\\Chrome\\FlowProfile",
+      "email": "conta1@gmail.com",
+      "project_id": "00000000-0000-0000-0000-000000000000",
+      "project_url": "https://flow.google.com/project/00000000-0000-0000-0000-000000000000",
+      "ultimo_saldo_creditos": 500,
+      "ativa": true
+    },
+    {
+      "slot": 2,
+      "porta": 9226,
+      "cdp_url": "http://127.0.0.1:9226",
+      "profile_dir": "C:\\Users\\SEU_USUARIO\\AppData\\Local\\Google\\Chrome\\FlowProfile_02",
+      "email": "conta2@gmail.com",
+      "project_id": "11111111-1111-1111-1111-111111111111",
+      "project_url": "https://flow.google.com/project/11111111-1111-1111-1111-111111111111",
+      "ultimo_saldo_creditos": null,
+      "ativa": true
+    }
+  ]
+}

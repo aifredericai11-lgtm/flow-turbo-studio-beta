@@ -362,6 +362,8 @@ def mover_para_reprovados(
     return mp4_dest
 
 
+import unicodedata
+
 _NUM_MAP_FALA = {
     "zero": "0",
     "one": "1",
@@ -374,11 +376,24 @@ _NUM_MAP_FALA = {
     "eight": "8",
     "nine": "9",
     "ten": "10",
+    "cero": "0",
+    "uno": "1",
+    "una": "1",
+    "dos": "2",
+    "tres": "3",
+    "cuatro": "4",
+    "cinco": "5",
+    "seis": "6",
+    "siete": "7",
+    "ocho": "8",
+    "nueve": "9",
+    "diez": "10",
 }
 
 
 def _normalizar_token_fala(w: str) -> str:
-    t = re.sub(r"[^a-z0-9]", "", (w or "").lower())
+    sem_acento = unicodedata.normalize("NFKD", (w or "").lower()).encode("ascii", "ignore").decode("ascii")
+    t = re.sub(r"[^a-z0-9]", "", sem_acento)
     return _NUM_MAP_FALA.get(t, t)
 
 
@@ -500,6 +515,7 @@ def tesoura_cirurgica_3_passes(
         "casadas": max(casadas_count, idx_pedido),
         "total": len(tokens_pedidos),
         "cauda_2s_integra": cauda_integra,
+        "texto_transcrito": str(trans.get("texto") or ""),
         "palavras_alinhadas": [
             [str(p.get("palavra", "")).strip(), round(float(p.get("inicio", 0.0)), 2), round(float(p.get("fim", 0.0)), 2)]
             for p in palavras_ouvidas[: indice_ultima_palavra_roteiro + 1]
@@ -757,7 +773,7 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
 
-    pal_up = re.sub(r"[^A-Z0-9 ]+", "", (palavra_cta or "YES").strip().upper()) or "YES"
+    pal_up = re.sub(r"[^A-Z0-9ÁÉÍÓÚÜÑ ]+", "", (palavra_cta or "YES").strip().upper()) or "YES"
     pal_up = re.sub(r"\s+", " ", pal_up).strip()
     xk_magenta = "&H00B45CF6&"
     t_cursor = 0.0
@@ -766,7 +782,7 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
         dur_c = float(c.get("duracao") or 6.0)
         fala_raw = str(c.get("fala") or "").strip()
         palavras_raw = [w for w in re.split(r"\s+", fala_raw) if w]
-        palavras_limpas = [re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", w).upper() for w in palavras_raw]
+        palavras_limpas = [re.sub(r"^[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ]+|[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ]+$", "", w).upper() for w in palavras_raw]
         palavras_limpas = [w for w in palavras_limpas if w]
 
         # Calcular tempos proporcionais por caractere (exatamente como `Jh` em `zerum_app.js`)
@@ -783,6 +799,7 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
 
         if palavras_limpas and not sem_legenda:
             n_bloco = max(1, int(blocos_palavras or 3))
+            pal_target_Only = pal_up.replace("COMMENT ", "").replace("COMENTA ", "").strip()
             for k_start in range(0, len(palavras_limpas), n_bloco):
                 grp = palavras_limpas[k_start : k_start + n_bloco]
                 for active_i in range(len(grp)):
@@ -792,8 +809,8 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
                     for j, w_txt in enumerate(grp):
                         idx_j = k_start + j
                         prev_window = palavras_limpas[max(0, idx_j - 3) : idx_j]
-                        is_cta_word = (w_txt == pal_up) and any(
-                            pw in ("COMMENT", "TYPE", "WRITE", "COMENTE", "DIGITE") for pw in prev_window
+                        is_cta_word = (w_txt in (pal_up, pal_target_Only, "SI", "SÍ")) and any(
+                            pw in ("COMMENT", "TYPE", "WRITE", "COMENTE", "COMENTA", "ESCRIBE", "DIGITE") for pw in prev_window
                         )
                         if is_cta_word:
                             partes_txt.append(f'{{\\c{xk_magenta}}}"{w_txt}"{{\\c&H00FFFFFF&}}')
@@ -806,14 +823,14 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
                         f"Dialogue: 1,{_fmt_ass_time(t0)},{_fmt_ass_time(t1)},{style_name},,0,0,0,,{texto_ass}"
                     )
 
-        # Pop-up CTA `c1` oficial do Flow Turbo Studio na última cena
+        # Pop-up CTA `c1` oficial do Zerum 001 na última cena
         mostrar_cta = bool(palavra_cta) and (apenas_botao_cta or est_low != "sem_legenda_sem_cta")
         if idx_c == len(cenas) - 1 and mostrar_cta:
             idx_cmd = next(
                 (
                     i_w
                     for i_w, w_str in enumerate(palavras_limpas)
-                    if w_str in ("COMMENT", "TYPE", "WRITE", "COMENTE", "DIGITE", "CLICK", "PINNED", "CITY")
+                    if w_str in ("COMMENT", "TYPE", "WRITE", "COMENTE", "COMENTA", "ESCRIBE", "DIGITE", "CLICK", "PINNED", "CITY")
                 ),
                 -1,
             )
@@ -836,8 +853,10 @@ Style: Angel,Poppins Bold,34,&H40FFFFFF,&H40FFFFFF,&H80000000,&H00000000,0,0,0,0
                         f"\\t({g_ms + s_ms},{min(n_ms, g_ms + 2 * s_ms)},\\fscx96.5\\fscy96.5)"
                     )
                     g_ms += 2 * s_ms
-                if pal_up.startswith(("COMMENT ", "CLICK ", "PINNED ", "CHECK ")):
+                if pal_up.startswith(("COMMENT ", "COMENTA ", "CLICK ", "PINNED ", "CHECK ")):
                     texto_cta = pal_up
+                elif pal_up in ("SÍ", "SI", "QUIERO", "RECETA", "INFO", "YO"):
+                    texto_cta = f"COMENTA {pal_up}"
                 else:
                     texto_cta = f"COMMENT {pal_up}"
                 if len(texto_cta) > 13:
