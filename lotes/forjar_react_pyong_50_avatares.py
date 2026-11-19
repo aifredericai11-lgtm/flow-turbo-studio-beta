@@ -50,6 +50,10 @@ for p_s in (str(ROOT), str(SCRATCH)):
     if p_s not in sys.path:
         sys.path.insert(0, p_s)
 
+from forja.catalogo_100_arquetipos_react_isolados import (
+    ARQUETIPOS_105_ISOLADOS,
+    HOOKS_25_VARIACOES_PYONG,
+)
 from forja.flow_rpc_direto import (
     aguardar_midia_rpc,
     gerar_imagem_rpc,
@@ -77,113 +81,23 @@ RCLONE_DIR = pathlib.Path(r"H:\Meu Drive\HUB CENTRAL OP ORGÂNICO\07_REACT_RCLON
 MAT_DIR = pathlib.Path(r"C:\Hub001\MATRIZES_VIRAIS_1611\react_pyong_50")
 MAT_DIR.mkdir(parents=True, exist_ok=True)
 
-AVATARS_BANK_DIR = pathlib.Path(r"C:\Hub001\AVATARES_FIXOS_REACT_50_V2")
+AVATARS_BANK_DIR = pathlib.Path(r"C:\Hub001\AVATARES_ISOLADOS_REACT_105_V3")
 AVATARS_BANK_DIR.mkdir(parents=True, exist_ok=True)
 
 ESTEIRA_REACT_BASE = pathlib.Path(r"C:\Hub001\VIDEOS_ESTEIRA_TREE\US\WL\REACT\C01\G00")
 ESTEIRA_REACT_BASE.mkdir(parents=True, exist_ok=True)
 
 TODAY_STR = f"{datetime.now():%Y-%m-%d}"
-FOLDER_LABEL = "LOTE_105__REACT_PYONG_50_AVATARES__07_REACT_RCLONE"
-COFRE_FOLDER_NAME = "REACT_PYONG_50_AVATARES_RCLONE_105"
+FOLDER_LABEL = "LOTE_105__REACT_PYONG_105_ARQUETIPOS_ISOLADOS__07_REACT_RCLONE"
+COFRE_FOLDER_NAME = "REACT_PYONG_105_ARQUETIPOS_ISOLADOS_RCLONE_105"
 
-# Hooks curtos idênticos ao Pyong ("Você já viu esse vídeo que viralizou?" ~2.0s–2.5s)
-# TRAVA ESTRITA DO REVISOR WHISPER: `must_end_any` exige OBRIGATORIAMENTE a última palavra real da frase ("viral" / "recipe")!
-PYONG_HOOKS_EN = [
-    {"fala": "Have you seen this video that just went viral?", "must_end_any": ["viral"]},
-    {"fala": "Did you see this recipe video that just went viral?", "must_end_any": ["viral"]},
-    {"fala": "Have you seen this natural trick that went viral?", "must_end_any": ["viral"]},
-    {"fala": "Wait, have you seen this video that just went viral?", "must_end_any": ["viral"]},
-    {"fala": "Have you seen why this home recipe just went viral?", "must_end_any": ["viral"]},
-]
+PYONG_HOOKS_EN = HOOKS_25_VARIACOES_PYONG
+AVATARES_50_SPECS = ARQUETIPOS_105_ISOLADOS
 
 OUTRO_CTA_SPECS = [
     {"fala": "Try this natural recipe at home, and follow for more daily health tips.", "must_end_any": ["tips"]},
     {"fala": "Save this natural recipe to try at home, and follow for more daily health tips.", "must_end_any": ["tips"]},
 ]
-
-# 50 Avatares Fixos Únicos com Estrutura Óssea Completa (Fusão Suprema V2 — Homens e Mulheres Brancos + Asiático-Americanos estilo Pyong)
-AVATARES_50_SPECS: list[dict[str, str]] = [
-    # 1: Homem Asiático-Americano estilo Pyong Lee (Piloto #1!)
-    {
-        "gender": "male",
-        "age": "36",
-        "person": "East-Asian American man with straight dark-black medium-short hair parted naturally on the left with a few loose strands across his forehead, dark-brown eyes, broad forehead, defined cheekbones, straight nose, smooth clean-shaven jawline, and natural unstyled eyebrows",
-        "role": "everyday American wellness and health creator",
-        "shirt": "a matte washed-black cotton crew-neck t-shirt with natural lived-in fabric folds",
-        "room": "an ordinary lived-in American apartment living room with vertical off-white curtain blinds behind him and soft directional daylight from a side window on the right",
-    },
-    # 2: Mulher Branca 41 anos
-    {
-        "gender": "female",
-        "age": "41",
-        "person": "Caucasian American woman with dark chestnut-brown shoulder-length hair pulled back casually with a matte claw clip leaving loose flyaway strands at the temples, warm hazel-brown eyes, oval face, defined cheekbones, straight nose, and natural unstyled eyebrows",
-        "role": "everyday middle-class American mom and home wellness enthusiast",
-        "shirt": "a matte heather-grey ribbed cotton henley t-shirt with subtle fabric weave",
-        "room": "an ordinary lived-in American home kitchen with neutral off-white shaker cabinets, a stainless faucet, and a bright side window clipping naturally into soft white daylight bloom",
-    },
-    # 3: Homem Branco 47 anos
-    {
-        "gender": "male",
-        "age": "47",
-        "person": "Caucasian American man with short brushed-back salt-and-pepper brown hair, blue-grey eyes, broad forehead with subtle horizontal expression lines, square jawline with light natural 5-o'clock stubble, and straight nose",
-        "role": "everyday American physical therapist and dad",
-        "shirt": "a matte slate-blue washed cotton crew-neck t-shirt",
-        "room": "a lived-in American home dining room with off-white walls, a wooden bookshelf at 2m depth, and a bright side window casting natural directional daylight",
-    },
-    # 4: Mulher Branca 46 anos
-    {
-        "gender": "female",
-        "age": "46",
-        "person": "Caucasian American woman with honey-blonde chin-length bob hair with a natural side part and fine flyaway strands, soft green-blue eyes, high cheekbones, soft jawline, and honest crow's feet around the eyes",
-        "role": "everyday American registered nurse and nutrition reader",
-        "shirt": "a matte sage-olive washed cotton V-neck top",
-        "room": "an everyday American kitchen with matte cream cabinets, a black drip coffee maker on the back counter, and an overhead ceiling fixture clipping into soft white bloom",
-    },
-    # 5: Homem Branco 52 anos
-    {
-        "gender": "male",
-        "age": "52",
-        "person": "Caucasian American man with short sandy-brown hair with silver temples, thin rectangular eyeglasses, warm brown eyes, defined cheekbones, and a neatly trimmed short salt-and-pepper beard",
-        "role": "ordinary middle-class American health researcher",
-        "shirt": "a matte charcoal-grey cotton polo shirt with zero gloss",
-        "room": "a lived-in American home office with neutral beige walls, framed certificates at 2m depth, and directional window daylight from the left",
-    },
-    # 6..50: Mais 45 avatares brancos (mulheres e homens 34..60 anos) com estrutura óssea detalhada
-]
-
-_EXTRA_PEOPLE = [
-    ("female", "38", "Caucasian American woman with medium auburn-brown straight hair tucked behind her ears with wispy flyaway strands, hazel eyes, heart-shaped face, defined cheekbones, and straight nose", "a matte oatmeal-beige fine knit short-sleeve top", "a bright American living room with sheer white window curtains and a potted green plant in the background"),
-    ("female", "51", "Caucasian American woman with ash-blonde shoulder-length bob hair with subtle silver highlights, thin wire-frame glasses, soft blue eyes, oval face, and natural laugh lines", "a matte dusty-plum washed cotton crew-neck t-shirt", "a lived-in American kitchen with oak wood cabinets and natural window daylight"),
-    ("male", "44", "Caucasian American man with short dark-brown hair, clean-shaven angular jawline, green-hazel eyes, broad forehead, and natural eyebrows", "a matte navy-blue washed cotton crew-neck t-shirt", "an ordinary American living room with vertical off-white blinds and directional daylight"),
-    ("female", "49", "Caucasian American woman with chestnut-brown hair in a casual low ponytail with temple flyaways, warm dark-brown eyes, defined cheekbones, and soft jawline", "a matte dusty-rose washed cotton t-shirt", "a sunlit American kitchen with white tile backsplash and matte ceramic mugs on the counter"),
-    ("male", "55", "Caucasian American man with closely cropped silver-grey hair, warm hazel eyes, broad forehead, and a neatly trimmed short grey-brown beard", "a matte sage-green cotton henley shirt", "a lived-in American home kitchen with neutral off-white cabinets and an overhead ceiling lamp"),
-    ("female", "35", "Caucasian American woman with golden-blonde hair in a casual half-up clip, blue eyes, fair skin with subtle natural freckles on the nose bridge, and defined cheekbones", "a matte washed-charcoal cotton crew-neck t-shirt", "a bright American apartment living room with white bookshelves and side window light"),
-    ("female", "54", "Caucasian American woman with silver-streaked light-brown bob hair, tortoiseshell reading glasses, blue-grey eyes, and honest expression lines", "a matte slate-blue cotton blouse", "a classic American kitchen with cream shaker cabinets and stainless refrigerator in the back"),
-    ("male", "42", "Caucasian American man with wavy medium-brown hair, light facial stubble, blue eyes, straight nose, and square jawline", "a matte heather-taupe crew-neck cotton t-shirt", "a bright American dining area with a large daylight window on the side"),
-    ("female", "43", "Caucasian American woman with light caramel-brown shoulder-length hair with center part, green eyes, oval face, and high cheekbones", "a matte cream-white ribbed cotton t-shirt", "a contemporary American kitchen with light grey cabinets and marble counter in the back"),
-    ("male", "50", "Caucasian American man with receding salt-and-pepper hair, rimless glasses, clean-shaven jaw, brown eyes, and natural forehead lines", "a matte dark steel-blue polo shirt", "a lived-in American home office with books and soft window daylight"),
-    ("female", "48", "Caucasian American woman with strawberry-blonde medium bob hair, thin round metal glasses, green-blue eyes, and light natural freckles", "a matte forest-green washed cotton t-shirt", "a cozy American living room with off-white walls and a table lamp in the background"),
-    ("female", "57", "Caucasian American woman with short silver-blonde bob hair, warm brown eyes, defined cheekbones, and friendly natural crow's feet", "a matte soft-teal washed cotton top", "a bright American sunroom/kitchen with white window frames"),
-    ("male", "39", "East-Asian American man with short textured black hair, warm dark-brown eyes, clean-shaven face, defined cheekbones, and straight nose", "a matte charcoal-slate crew-neck t-shirt", "a minimalist American apartment living room with sheer white curtains and daylight"),
-    ("female", "45", "Caucasian American woman with dark espresso-brown shoulder-length hair in a claw clip, blue eyes, fair skin, and soft square jawline", "a matte burgundy-wine casual henley top", "a lived-in American home kitchen with warm wood cabinets and ceiling light bloom"),
-    ("male", "58", "Caucasian American man with full silver-grey short hair, clean-shaven jawline, blue eyes, and natural mature skin creases", "a matte oatmeal-grey cotton crew-neck t-shirt", "a bright American farmhouse kitchen with white beadboard cabinets"),
-]
-
-while len(AVATARES_50_SPECS) < 50:
-    idx_e = (len(AVATARES_50_SPECS) - 5) % len(_EXTRA_PEOPLE)
-    g, a_base, p_desc, sh, rm = _EXTRA_PEOPLE[idx_e]
-    age_mod = int(a_base) + ((len(AVATARES_50_SPECS) // len(_EXTRA_PEOPLE)) % 3) - 1
-    AVATARES_50_SPECS.append(
-        {
-            "gender": g,
-            "age": str(age_mod),
-            "person": p_desc,
-            "role": "everyday American home wellness enthusiast",
-            "shirt": sh,
-            "room": rm,
-        }
-    )
 
 
 def _prompt_f1_fusao_suprema_v2(av_num: int, spec_av: dict[str, str]) -> str:
@@ -1056,6 +970,7 @@ def montar_video_react_pyong_nvenc(
         )
 
     # 4. Concatena SEG 1 (Hook ~2.0s) + SEG 2 (Receita 100% Completa) + SEG 3 (Outro Tela Cheia ~4.0s)
+    # COM BLINDAGEM ANTI-PDQF/TMK INDIVIDUAL (grão de sensor orgânico + micro-curva de cor única por vídeo + -map_metadata -1)
     concat_txt = wdir / "concat.txt"
     concat_txt.write_text(
         f"file '{seg1_mp4.resolve().as_posix()}'\n"
@@ -1065,11 +980,17 @@ def montar_video_react_pyong_nvenc(
     )
     esteira_dst.parent.mkdir(parents=True, exist_ok=True)
     tmp_dst = esteira_dst.with_suffix(".tmp.mp4")
+    br_shift = round(((vid_idx % 7) - 3) * 0.004, 4)
+    ct_shift = round(1.0 + ((vid_idx % 5) - 2) * 0.008, 4)
+    sat_shift = round(1.0 + ((vid_idx % 9) - 4) * 0.006, 4)
+    vf_pdqf = f"eq=brightness={br_shift}:contrast={ct_shift}:saturation={sat_shift},noise=alls=2:allf=t+u,format=yuv420p"
     with NVENC_SEM:
         subprocess.run(
             [
                 FFMPEG_BIN, "-y", "-loglevel", "error",
                 "-f", "concat", "-safe", "0", "-i", str(concat_txt.resolve()),
+                "-map_metadata", "-1",
+                "-vf", vf_pdqf,
                 "-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-multipass", "fullres",
                 "-rc", "vbr", "-rc-lookahead", "20", "-cq", "25",
                 "-b:v", "1100k", "-maxrate", "1600k", "-bufsize", "3000k",
@@ -1121,7 +1042,7 @@ def gerar_tira_react_auditoria(mp4_path: pathlib.Path, out_jpg: pathlib.Path) ->
 def main() -> None:
     t0 = time.time()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--avatars", type=int, default=50)
+    ap.add_argument("--avatars", type=int, default=105)
     ap.add_argument("--videos", type=int, default=105)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--test-pilot1", action="store_true", help="Gera o Piloto #1 (AV001 c/ Realismo Fusão Suprema V2 + AD06 JSON em Low Priority)")
@@ -1132,7 +1053,7 @@ def main() -> None:
     rclone_files = sorted(RCLONE_DIR.glob("*.mp4"))
 
     print(
-        f"=== MOTOR REACT PYONG LEE V2 (FUSAO SUPREMA V2 + AD06 JSON) | {args.avatars} AVATARES + {min(args.videos, len(rclone_files))} VIDEOS | CONTAS: {contas} ===",
+        f"=== MOTOR REACT PYONG LEE V3 (105 ARQUETIPOS ISOLADOS ANTI-PDQF) | {args.avatars} AVATARES + {min(args.videos, len(rclone_files))} VIDEOS | CONTAS: {contas} ===",
         flush=True,
     )
 
@@ -1142,7 +1063,6 @@ def main() -> None:
         res = montar_video_react_pyong_nvenc(1, rc0, catalogo.get(rc0.name, {}), av1, forcar_remontar=True)
         out_strip = ARTIFACTS_DIR / "inspect_pilot1_v2_realismo_pyong_15frames.jpg"
         gerar_tira_react_auditoria(pathlib.Path(res["path"]), out_strip)
-        # Salva também o par F1 + F2 do AV001 em alta resolução para inspeção de pele/realismo
         im1 = cv2.resize(cv2.imread(av1["f1"]), (360, 640))
         im2 = cv2.resize(cv2.imread(av1["f2"]), (360, 640))
         out_av_preview = ARTIFACTS_DIR / "inspect_av001_v2_realismo_frames.jpg"
@@ -1150,7 +1070,7 @@ def main() -> None:
         print(json.dumps({"ok": True, "video": res, "strip": str(out_strip), "avatar_frames": str(out_av_preview)}, indent=2))
         return
 
-    n_av = max(1, min(50, int(args.avatars)))
+    n_av = max(1, min(len(AVATARES_50_SPECS), int(args.avatars)))
     target_rclone = rclone_files[: max(1, int(args.videos))]
     avatars_prontos: dict[int, dict[str, Any]] = {}
     vids_prontos: list[pathlib.Path] = []
