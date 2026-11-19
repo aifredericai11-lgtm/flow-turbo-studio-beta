@@ -50,21 +50,36 @@
     }
   } catch (e) {}
 
+  // Janela deslizante estrita de tokens reCAPTCHA na aba (máximo 4 tokens a cada 15.5s por conta)
+  const _tokenTimestamps = [];
+  const MAX_TOKENS_JANELA = 4;
+  const JANELA_TOKENS_MS = 15500;
+
   function execOriginal() {
     const trap = window.__zerumCandidateTrapV1;
-    if (trap?.protocol === 'zerum-candidate-trap-v1' && (!trap.error || trap.error === ERRO_TOLERADO || trap.error === 'RECAPTCHA_CAPTURA_TARDIA') && typeof trap.exec === 'function') {
+    // PROIBIDO aceitar RECAPTCHA_CAPTURA_TARDIA ou cair em window.grecaptcha.enterprise.execute direto
+    // (pois a função pós-congelamento contém o wrapper "extension_hijack_detected" do Google!).
+    if (trap?.protocol === 'zerum-candidate-trap-v1' && (!trap.error || trap.error === ERRO_TOLERADO) && typeof trap.exec === 'function') {
       return trap.exec;
-    }
-    // Fallback direto caso a aba tenha sido aberta antes da injeção no document_start (evita erro SEM_ARMADILHA no Mac)
-    const g = window.grecaptcha && window.grecaptcha.enterprise;
-    if (g && typeof g.execute === 'function') {
-      return g.execute.bind(g);
     }
     return null;
   }
   async function token(action) {
     const ex = execOriginal(); if (!ex) throw new Error('SEM_ARMADILHA');
     const g = window.grecaptcha && window.grecaptcha.enterprise; if (!g) throw new Error('SEM_RECAPTCHA');
+    // Respeita a lei máxima de <= 4 tokens por janela de 15.5 segundos na mesma aba/conta
+    while (true) {
+      const agora = Date.now();
+      while (_tokenTimestamps.length > 0 && (agora - _tokenTimestamps[0]) >= JANELA_TOKENS_MS) {
+        _tokenTimestamps.shift();
+      }
+      if (_tokenTimestamps.length < MAX_TOKENS_JANELA) {
+        _tokenTimestamps.push(agora);
+        break;
+      }
+      const esperaMs = Math.max(250, JANELA_TOKENS_MS - (agora - _tokenTimestamps[0]) + 150);
+      await new Promise((r) => setTimeout(r, esperaMs));
+    }
     await Promise.race([new Promise((r) => g.ready(r)), new Promise((_, j) => setTimeout(() => j(new Error('RECAPTCHA_TIMEOUT')), 12000))]);
     const t = await Promise.race([ex(siteKey(), { action }), new Promise((_, reject) => setTimeout(() => reject(new Error('RECAPTCHA_EXEC_TIMEOUT')), 12000))]);
     if (!t || t.length < 100) throw new Error('TOKEN_VAZIO');
@@ -303,13 +318,13 @@
       };
     }
 
-    const CHUNK_MAX = 2;
+    const CHUNK_MAX = 4;
     const finalItems = new Array(itens.length);
     let lastErr = '';
 
     for (let start = 0; start < itens.length; start += CHUNK_MAX) {
       const slice = itens.slice(start, start + CHUNK_MAX);
-      // Se algum item deste par não tiver img válida (ex.: take POV t2v), dispara individualmente com auto-heal t2v/r2v
+      // Se algum item deste bloco de até 4 takes não tiver img válida (ex.: take POV t2v), dispara com auto-heal t2v/r2v respeitando o limitador de 4 tokens/15s
       if (slice.some(it => !validId(it.img || it.first_frame_id))) {
         for (let k = 0; k < slice.length; k++) {
           const r1 = await _dispararUm(slice[k]);
@@ -321,6 +336,7 @@
         continue;
       }
 
+      // Dispara até 4 takes JUNTOS em 1 único RPC eb1hJf gastando 1 ÚNICO token reCAPTCHA!
       const tk = await token('VIDEO_GENERATION');
       const reqs = slice.map((it) => {
         const M = it.modelo || 'veo_3_1_i2v_lite_low_priority';
@@ -344,13 +360,9 @@
         const cands = Array.from(new Set([mid, ...rowUuids, wfId].filter(Boolean)));
         if (cands.length > 0 && !e) {
           finalItems[start + k] = { ok: true, mediaId: mid || cands[0] || '', workflowId: wfId, cands, erro: '' };
-        } else if (e !== 'INCOMUM' && e !== 'TRAFEGO') {
-          // Fallback imediato para o item que faltou no chunk
-          const rFallback = await _dispararUm(slice[k]);
-          finalItems[start + k] = rFallback;
-          if (rFallback.erro) lastErr = rFallback.erro;
         } else {
-          finalItems[start + k] = { ok: false, mediaId: '', workflowId: '', cands: [], erro: e };
+          // NÃO faz re-tentativa oculta imediata de 0ms dentro do JS (para nunca estourar tokens pelas costas do Python!)
+          finalItems[start + k] = { ok: false, mediaId: '', workflowId: wfId, cands: [], erro: e || 'SLOT_VAZIO_NO_LOTE' };
         }
       }
       if (e === 'INCOMUM' || e === 'TRAFEGO') break;

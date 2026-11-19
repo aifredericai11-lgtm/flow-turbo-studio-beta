@@ -328,13 +328,40 @@ def obter_ou_gerar_n_frames_ultrabatch(
             frames_out = [""] * n_takes
             frames_out[0] = f1_id
             if n_takes > 1:
-                with ThreadPoolExecutor(max_workers=min(6, n_takes - 1)) as ex_fn:
-                    futs = [ex_fn.submit(_gerar_f_sub, idx_t) for idx_t in range(1, n_takes)]
-                    for fut in futs:
-                        i_t, mid_t = fut.result()
-                        if prompts_img[i_t] and not mid_t:
-                            raise RuntimeError(f"Falha ao gerar frame_{i_t + 1} para {spec.get('job_id')}")
-                        frames_out[i_t] = mid_t
+                # Primeiro tenta disparar todos os quadros restantes (frame_2..frame_N) em 1 ÚNICO RPC ogiZ0b (1 único token reCAPTCHA!)
+                indices_para_gerar: list[int] = []
+                itens_lote_img: list[dict[str, Any]] = []
+                for idx_t in range(1, n_takes):
+                    p_txt = str(prompts_img[idx_t] or "").strip()
+                    if not p_txt:
+                        frames_out[idx_t] = ""
+                    elif p_txt == str(prompts_img[0] or "").strip() and f1_id:
+                        frames_out[idx_t] = f1_id
+                    else:
+                        r_ids = [x for x in ([f1_id, refs_orig[idx_t]] if len(refs_orig) > idx_t and refs_orig[idx_t] else [f1_id]) if x]
+                        indices_para_gerar.append(idx_t)
+                        itens_lote_img.append({"prompt": p_txt, "refs": r_ids, "aspecto": 2, "modelo": "BELUGA"})
+
+                if itens_lote_img:
+                    r_batch_img = gerar_imagens_lote_rpc(itens_lote_img, modelo="BELUGA", aspecto=2, cdp_url=cdp_url)
+                    batch_items = list(r_batch_img.get("items") or []) if isinstance(r_batch_img, dict) else []
+                    cdp_batch = (r_batch_img.get("cdp_url") if isinstance(r_batch_img, dict) else None) or cdp_url
+
+                    def _coletar_ou_fallback_img(pos_b: int, idx_take: int) -> tuple[int, str]:
+                        dest_p = pasta_job / f"frame_{idx_take + 1}.jpg"
+                        if pos_b < len(batch_items) and isinstance(batch_items[pos_b], dict) and batch_items[pos_b].get("ok"):
+                            w_b = aguardar_midia_rpc(batch_items[pos_b], tipo="image", destino_arquivo=dest_p, timeout_s=180, cdp_url=cdp_batch)
+                            if w_b.get("ok") and w_b.get("mediaId"):
+                                return idx_take, str(w_b["mediaId"])
+                        return _gerar_f_sub(idx_take)
+
+                    with ThreadPoolExecutor(max_workers=min(6, len(indices_para_gerar))) as ex_fn:
+                        futs = [ex_fn.submit(_coletar_ou_fallback_img, pos_b, i_t) for pos_b, i_t in enumerate(indices_para_gerar)]
+                        for fut in futs:
+                            i_t, mid_t = fut.result()
+                            if prompts_img[i_t] and not mid_t:
+                                raise RuntimeError(f"Falha ao gerar frame_{i_t + 1} para {spec.get('job_id')}")
+                            frames_out[i_t] = mid_t
 
         salvar_item_cache_matrizes(
             chave_cache,

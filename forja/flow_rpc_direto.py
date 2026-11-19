@@ -444,7 +444,7 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                 async def _clean_and_navigate() -> None:
                     async with websockets.connect(ws_new, open_timeout=8, close_timeout=3) as ws:
                         await ws.send(json.dumps({"id": 1, "method": "Page.enable", "params": {}}))
-                        for idx_o, orig in enumerate(["https://flow.google.com", "https://www.google.com", "https://www.gstatic.com", "https://labs.google"]):
+                        for idx_o, orig in enumerate(["https://flow.google.com", "https://labs.google"]):
                             await ws.send(
                                 json.dumps(
                                     {
@@ -452,7 +452,8 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                                         "method": "Storage.clearDataForOrigin",
                                         "params": {
                                             "origin": orig,
-                                            "storageTypes": "local_storage,session_storage,indexeddb,cache_storage,service_workers",
+                                            # Preserva local_storage e indexeddb (onde vive a âncora de confiança _grecaptcha do Google!)
+                                            "storageTypes": "session_storage,cache_storage,service_workers",
                                         },
                                     }
                                 )
@@ -1376,18 +1377,18 @@ def gerar_videos_lote_rpc(
     modelo: str = "veo_3_1_i2v_lite_low_priority",
     aspecto: int = 1,
     cdp_url: str = CDP_URL_PADRAO,
-    max_por_pacote_rpc: int = 2,
+    max_por_pacote_rpc: int = 4,
 ) -> dict[str, Any]:
     """
-    Suporta QUALQUER número de takes por vídeo (1, 2, 3, 4, 6, 8, 12, N takes) sem limite fixo!
-    Fatias automaticamente listas grandes em micro-pacotes de `max_por_pacote_rpc` (padrão: 2 takes por chamada `eb1hJf`,
-    teto seguro do Google Flow Lower Priority que evita truncamento do 4º..Nº take), distribuindo os micro-pacotes
-    em paralelo entre as contas ativas do pool e garantindo 100% dos takes com UUIDs válidos (`ZERO SEM_CANDIDATOS_UUID`).
+    Suporta QUALQUER número de takes por vídeo (1, 2, 3, 4, 6, 8, 12, N takes)!
+    Envia até 4 takes JUNTOS em 1 único RPC `eb1hJf` com 1 único token reCAPTCHA (`max_por_pacote_rpc=4`),
+    e se o vídeo tiver mais de 4 takes (ex.: 6 ou 8 takes), fatia o excedente em blocos de até 4 takes,
+    distribuindo entre as contas ativas e respeitando a janela de <= 4 tokens / 15.5s por conta!
     """
     if not itens:
         return {"ok": False, "items": [], "erro": "LOTE_VAZIO", "cdp_url": cdp_url}
 
-    chunk_sz = max(1, int(max_por_pacote_rpc or 2))
+    chunk_sz = max(1, int(max_por_pacote_rpc or 4))
     if len(itens) <= chunk_sz:
         return _disparar_sublote_video_rpc(itens, modelo=modelo, aspecto=aspecto, cdp_url=cdp_url)
 
