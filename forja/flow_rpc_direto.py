@@ -81,7 +81,7 @@ _FILE_UPLOAD_CACHE: dict[tuple[str, int, str], str] = {}
 _ACTIVE_POOL_LOCK = threading.Lock()
 _ACTIVE_POOL_CACHE: tuple[float, list[str]] = (0.0, [])
 _LAST_TELEMETRY_DUMP_TS = 0.0
-_TELEMETRY_PATH = Path(r"C:\Hub001\forja_live_telemetry.json") if Path(r"C:\Hub001").exists() else (Path(__file__).resolve().parent.parent / "lotes" / "forja_live_telemetry.json")
+_TELEMETRY_PATH = Path(r"C:\Hub001\forja_live_telemetry.json")
 
 
 def _gravar_telemetria_live(force: bool = False) -> None:
