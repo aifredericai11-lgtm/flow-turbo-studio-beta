@@ -78,10 +78,12 @@ _MEDIA_OWNER_CDP: dict[str, str] = {}
 _MEDIA_SOURCE_FILE: dict[str, Path] = {}
 _FILE_UPLOAD_CACHE: dict[tuple[str, int, str], str] = {}
 
+from forja.hw_accel import caminho_telemetria_flow
+
 _ACTIVE_POOL_LOCK = threading.Lock()
 _ACTIVE_POOL_CACHE: tuple[float, list[str]] = (0.0, [])
 _LAST_TELEMETRY_DUMP_TS = 0.0
-_TELEMETRY_PATH = Path(r"C:\Hub001\forja_live_telemetry.json")
+_TELEMETRY_PATH = caminho_telemetria_flow()
 
 
 def _gravar_telemetria_live(force: bool = False) -> None:
@@ -386,10 +388,12 @@ def _cadenciar_disparo_nao_bloqueante(intervalo_s: float = 0.35, cdp_url: str = 
 
 def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_projeto: bool = False) -> bool:
     """
-    Recarrega de forma limpa APENAS a conta `cdp_url` afetada por tráfego incomum, sem pausar as demais contas!
-    Se `forcar_novo_projeto=True` ou se o projeto atual já acumulou >= 2 falhas `INCOMUM` seguidas ("Projeto Contaminado"),
-    abre a home do Flow e cria automaticamente um Novo Projeto limpo (`/project/<NOVO_UUID>`), permitindo que
-    `_garantir_ref_na_conta` re-suba o `frame_1.jpg` salvo em disco para continuar os takes 2, 3 e 4 sem perder o `1.mp4`!
+    Recarrega de forma limpa APENAS a conta `cdp_url` afetada por tráfego incomum (Windows / MacBook / Linux):
+    - Mantém o MESMO projeto por padrão (preservando todos os `mediaId` já gerados na onda!).
+    - Fecha abas duplicadas do Flow deixando 1 única `/project/<UUID>`.
+    - Mantém o WebSocket CDP aberto do início ao fim: remove apenas `localStorage._grecaptcha` contaminado,
+      arma `trap-main.js` + `flow-core.js`, executa `Page.reload(ignoreCache=False)`, aguarda `trap.exec && SNlM0e`
+      subirem limpos e simula movimento humano de mouse via CDP!
     """
     import asyncio
     import websockets
@@ -397,17 +401,17 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
     u = _norm_cdp(cdp_url)
     ep = _get_ep(u)
     ep.consecutive_incomum += 1
-    criar_novo_proj = forcar_novo_projeto or (ep.consecutive_incomum >= 2)
+    criar_novo_proj = bool(forcar_novo_projeto)
     with ep.reload_lock:
         agora = time.time()
-        if (agora - ep.ultimo_reload_ts) < 20.0:
+        if (agora - ep.ultimo_reload_ts) < 18.0:
             return False
         ep.ultimo_reload_ts = agora
         ep.reload_event.clear()
         with ep.dispatch_lock:
-            ep.ultimo_dispatch_ts = max(ep.ultimo_dispatch_ts, agora + 10.5)
+            ep.ultimo_dispatch_ts = max(ep.ultimo_dispatch_ts, agora + 10.0)
         try:
-            time.sleep(1.5)
+            time.sleep(1.0)
             tabs = json.loads(_ur.urlopen(f"{u}/json/list", timeout=3.0).read())
             flow_tabs = [
                 t for t in tabs
@@ -416,6 +420,15 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                     or ("labs.google" in str(t.get("url") or "") and "/project/" in str(t.get("url") or ""))
                 )
             ]
+            if len(flow_tabs) > 1:
+                for extra_t in flow_tabs[1:]:
+                    tid_extra = extra_t.get("id")
+                    if tid_extra:
+                        try:
+                            _ur.urlopen(f"{u}/json/close/{tid_extra}", timeout=3.0).read()
+                        except Exception:
+                            pass
+                flow_tabs = flow_tabs[:1]
             old_proj_url = (
                 str(flow_tabs[0].get("url"))
                 if flow_tabs
@@ -428,43 +441,25 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                     ep.project_url = old_proj_url
 
             proj_url = "https://flow.google.com/" if criar_novo_proj else old_proj_url
+            ws_target = str(flow_tabs[0].get("webSocketDebuggerUrl") or "") if flow_tabs else ""
+            if not ws_target:
+                req_new = _ur.Request(f"{u}/json/new?{proj_url}", method="PUT")
+                new_t = json.loads(_ur.urlopen(req_new, timeout=5.0).read())
+                ws_target = str(new_t.get("webSocketDebuggerUrl") or "")
+                time.sleep(3.0)
 
-            req_new = _ur.Request(f"{u}/json/new?about:blank", method="PUT")
-            new_t = json.loads(_ur.urlopen(req_new, timeout=5.0).read())
-            ws_new = str(new_t.get("webSocketDebuggerUrl") or "")
-
-            for old_t in flow_tabs:
-                try:
-                    _ur.urlopen(f"{u}/json/close/{old_t['id']}", timeout=2.0).read()
-                except Exception:
-                    pass
-            time.sleep(0.5)
-
-            if ws_new:
-                async def _clean_and_navigate() -> None:
-                    async with websockets.connect(ws_new, open_timeout=8, close_timeout=3) as ws:
-                        await ws.send(json.dumps({"id": 1, "method": "Page.enable", "params": {}}))
-                        for idx_o, orig in enumerate(["https://flow.google.com", "https://labs.google"]):
-                            await ws.send(
-                                json.dumps(
-                                    {
-                                        "id": 900 + idx_o,
-                                        "method": "Storage.clearDataForOrigin",
-                                        "params": {
-                                            "origin": orig,
-                                            # Preserva local_storage e indexeddb (onde vive a âncora de confiança _grecaptcha do Google!)
-                                            "storageTypes": "session_storage,cache_storage,service_workers",
-                                        },
-                                    }
-                                )
-                            )
-                        await asyncio.sleep(0.8)
+            if ws_target:
+                async def _reset_grecaptcha_and_reload() -> None:
+                    async with websockets.connect(ws_target, open_timeout=8, close_timeout=3, max_size=32 * 1024 * 1024) as ws:
+                        await ws.send(json.dumps({"id": 1, "method": "Runtime.evaluate", "params": {"expression": "try { localStorage.removeItem('_grecaptcha'); } catch(e) {}", "returnByValue": True}}))
+                        await asyncio.sleep(0.15)
+                        await ws.send(json.dumps({"id": 2, "method": "Page.enable", "params": {}}))
                         trap_js = EXT_DIR / "trap-main.js"
                         if trap_js.exists():
                             await ws.send(
                                 json.dumps(
                                     {
-                                        "id": 2,
+                                        "id": 3,
                                         "method": "Page.addScriptToEvaluateOnNewDocument",
                                         "params": {"source": trap_js.read_text(encoding="utf-8")},
                                     }
@@ -475,31 +470,64 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                             await ws.send(
                                 json.dumps(
                                     {
-                                        "id": 22,
+                                        "id": 4,
                                         "method": "Page.addScriptToEvaluateOnNewDocument",
                                         "params": {"source": core_js.read_text(encoding="utf-8")},
                                     }
                                 )
                             )
-                        await ws.send(json.dumps({"id": 3, "method": "Page.navigate", "params": {"url": proj_url}}))
-                        await asyncio.sleep(5.5 if criar_novo_proj else 0.6)
+                        await asyncio.sleep(0.2)
                         if criar_novo_proj:
-                            # Clica automaticamente em "+ New Project" na home do Flow para criar um projeto 100% limpo
+                            await ws.send(json.dumps({"id": 5, "method": "Page.navigate", "params": {"url": "https://flow.google.com/"}}))
+                            await asyncio.sleep(5.0)
                             js_click_new = """(() => {
                                 const btns = [...document.querySelectorAll('button, a')];
                                 const b = btns.find(el => /new project|novo projeto/i.test((el.innerText || el.getAttribute('aria-label') || '')));
                                 if (b) { b.click(); return 'CLICKED_NEW'; }
+                                const links = [...document.querySelectorAll('a[href*="/project/"]')];
+                                if (links.length > 0) { links[0].click(); return 'CLICKED_EXISTING'; }
                                 return 'NO_BTN';
                             })()"""
                             await ws.send(json.dumps({"id": 44, "method": "Runtime.evaluate", "params": {"expression": js_click_new, "returnByValue": True}}))
-                            await asyncio.sleep(4.0)
+                            await asyncio.sleep(4.5)
+                        else:
+                            await ws.send(json.dumps({"id": 5, "method": "Page.reload", "params": {"ignoreCache": False}}))
+                            for wait_i in range(28):
+                                await asyncio.sleep(0.8)
+                                chk_id = 500 + wait_i
+                                await ws.send(
+                                    json.dumps(
+                                        {
+                                            "id": chk_id,
+                                            "method": "Runtime.evaluate",
+                                            "params": {
+                                                "expression": "Boolean(window.__zerumCandidateTrapV1 && typeof window.__zerumCandidateTrapV1.exec === 'function' && (!window.__zerumCandidateTrapV1.error || window.__zerumCandidateTrapV1.error === 'RECAPTCHA_ACESSOR_NAO_CONFIGURAVEL') && window.WIZ_global_data && window.WIZ_global_data.SNlM0e)",
+                                                "returnByValue": True,
+                                            },
+                                        }
+                                    )
+                                )
+                                try:
+                                    while True:
+                                        r_m = json.loads(await asyncio.wait_for(ws.recv(), timeout=1.2))
+                                        if r_m.get("id") == chk_id:
+                                            val_ok = ((r_m.get("result") or {}).get("result") or {}).get("value")
+                                            if val_ok is True:
+                                                wait_i = 999
+                                            break
+                                except Exception:
+                                    pass
+                                if wait_i >= 999:
+                                    break
+                        for step in range(6):
+                            await ws.send(json.dumps({"id": 70 + step, "method": "Input.dispatchMouseEvent", "params": {"type": "mouseMoved", "x": 320 + step * 35, "y": 390 + (step % 3) * 28}}))
+                            await asyncio.sleep(0.12)
 
                 try:
-                    asyncio.run(_clean_and_navigate())
+                    asyncio.run(_reset_grecaptcha_and_reload())
                 except Exception:
                     pass
 
-            time.sleep(2.5 if criar_novo_proj else 6.5)
             try:
                 tabs_after = json.loads(_ur.urlopen(f"{u}/json/list", timeout=3.0).read())
                 for t_a in tabs_after:
@@ -508,11 +536,12 @@ def recarregar_aba_flow_anti_traffic(cdp_url: str = CDP_URL_PADRAO, forcar_novo_
                     if m_na:
                         ep.project_url = f"https://flow.google.com/project/{m_na.group(1)}"
                         ep.consecutive_incomum = 0
+                        ws_target = str(t_a.get("webSocketDebuggerUrl") or ws_target)
                         break
             except Exception:
                 pass
             with ep.ws_cache_lock:
-                ep.ws_url_cached = (time.time(), ws_new) if ws_new else None
+                ep.ws_url_cached = (time.time(), ws_target) if ws_target else None
             return True
         except Exception:
             time.sleep(3.0)

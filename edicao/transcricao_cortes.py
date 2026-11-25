@@ -411,21 +411,24 @@ def cortar_clipe_ffmpeg(
     destino.parent.mkdir(parents=True, exist_ok=True)
     segs = segmentos_ativos or [{"inicio_s": inicio_s, "fim_s": fim_s}]
 
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
     if len(segs) == 1 and abs(fator_velocidade - 1.0) < 0.01:
         s0 = segs[0]
         duracao = max(0.05, float(s0["fim_s"]) - float(s0["inicio_s"]))
         cmd_nvenc = [
-            "ffmpeg", "-y", "-loglevel", "error",
+            ff_bin, "-y", "-loglevel", "error",
             "-ss", f"{float(s0['inicio_s']):.3f}",
             "-i", str(origem),
             "-t", f"{duracao:.3f}",
-            "-c:v", "h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "18", "-pix_fmt", "yuv420p",
+            *args_h264_hw(bitrate="4.5M", maxrate="6M", bufsize="8M", cq=18),
             "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
             str(destino),
         ]
         if subprocess.run(cmd_nvenc).returncode != 0:
             cmd_cpu = [
-                "ffmpeg", "-y", "-loglevel", "error",
+                ff_bin, "-y", "-loglevel", "error",
                 "-ss", f"{float(s0['inicio_s']):.3f}",
                 "-i", str(origem),
                 "-t", f"{duracao:.3f}",
@@ -468,17 +471,17 @@ def cortar_clipe_ffmpeg(
 
     fc_str = ";".join(filtros)
     cmd_nvenc = [
-        "ffmpeg", "-y", "-loglevel", "error",
+        ff_bin, "-y", "-loglevel", "error",
         "-i", str(origem),
         "-filter_complex", fc_str,
         "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "18", "-pix_fmt", "yuv420p",
+        *args_h264_hw(bitrate="4.5M", maxrate="6M", bufsize="8M", cq=18),
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         str(destino),
     ]
     if subprocess.run(cmd_nvenc).returncode != 0:
         cmd_cpu = [
-            "ffmpeg", "-y", "-loglevel", "error",
+            ff_bin, "-y", "-loglevel", "error",
             "-i", str(origem),
             "-filter_complex", fc_str,
             "-map", "[vout]", "-map", "[aout]",

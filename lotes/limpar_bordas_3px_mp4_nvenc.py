@@ -77,12 +77,13 @@ def limpar_borda_um_mp4(mp4_path: Path) -> dict:
 
     tmp_out = mp4_path.with_suffix(".noborder.tmp.mp4")
     vf = f"crop={cw}:{ch}:{crop_x}:{crop_y},scale=720:1280:flags=lanczos,format=yuv420p"
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
     cmd = [
-        FFMPEG_BIN, "-y", "-loglevel", "error",
+        encontrar_ffmpeg_bin(), "-y", "-loglevel", "error",
         "-i", str(mp4_path),
         "-vf", vf,
-        "-c:v", "h264_nvenc", "-preset", "p4", "-rc", "vbr", "-cq", "22",
-        "-b:v", "2.4M", "-maxrate", "3.5M",
+        *args_h264_hw(bitrate="2.4M", maxrate="3.5M", bufsize="5M", cq=22),
         "-c:a", "copy", "-movflags", "+faststart",
         str(tmp_out),
     ]

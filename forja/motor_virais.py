@@ -1051,20 +1051,23 @@ def aplicar_edicao_barata_video_pronto(
         shutil.copy2(video_entrada, video_saida)
         return video_saida
 
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
     filter_complex = ";".join(filter_parts)
     cmd_nvenc = [
-        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        ff_bin, "-y", "-hide_banner", "-loglevel", "error",
         *inputs,
         "-filter_complex", filter_complex,
         "-map", last_stream, "-map", "0:a?",
-        "-c:v", "h264_nvenc", "-preset", "p2", "-rc", "vbr", "-cq", "20", "-pix_fmt", "yuv420p",
+        *args_h264_hw(bitrate="4M", maxrate="5.5M", bufsize="7M", cq=20),
         "-c:a", "copy", "-movflags", "+faststart",
         str(video_saida),
     ]
     proc = subprocess.run(cmd_nvenc, capture_output=True, text=True, check=False)
     if proc.returncode != 0:
         cmd_cpu = [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            ff_bin, "-y", "-hide_banner", "-loglevel", "error",
             *inputs,
             "-filter_complex", filter_complex,
             "-map", last_stream, "-map", "0:a?",

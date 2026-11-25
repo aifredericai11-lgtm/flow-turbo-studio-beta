@@ -26,8 +26,13 @@ from forja.qa_clipe import avaliar_qa_clipe, mover_para_reprovados, tesoura_ciru
 from forja.seletores_flow import SELETORES_FLOW
 
 from contextlib import contextmanager
-import msvcrt
 import os
+import sys
+
+if sys.platform == "win32":
+    import msvcrt
+else:
+    msvcrt = None  # type: ignore[assignment]
 
 MAX_FRAMES_SIMULTANEOS = 5
 MAX_VIDEOS_SIMULTANEOS = 15

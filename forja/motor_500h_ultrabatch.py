@@ -443,9 +443,11 @@ def montar_video_1_passe_nvenc(
     )
 
     with _NVENC_SEM:
+        from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
         subprocess.run(
             [
-                "ffmpeg",
+                encontrar_ffmpeg_bin(),
                 "-y",
                 "-loglevel",
                 "error",
@@ -456,22 +458,7 @@ def montar_video_1_passe_nvenc(
                 "[vout]",
                 "-map",
                 "[aout]",
-                "-c:v",
-                "h264_nvenc",
-                "-preset",
-                "p4",
-                "-rc",
-                "vbr",
-                "-cq",
-                "23",
-                "-b:v",
-                "2.4M",
-                "-maxrate",
-                "3.4M",
-                "-bufsize",
-                "5M",
-                "-pix_fmt",
-                "yuv420p",
+                *args_h264_hw(bitrate="2.4M", maxrate="3.4M", bufsize="5M", cq=23),
                 "-movflags",
                 "+faststart",
                 "-c:a",

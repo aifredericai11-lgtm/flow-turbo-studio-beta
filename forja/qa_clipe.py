@@ -470,8 +470,10 @@ def tesoura_cirurgica_3_passes(
     if alucinacoes_finais or (dur_bruta - trim_end) > 0.35 or trim_start > 0.15:
         temp_cut = video_path.with_name(f"{video_path.stem}_tesoura_tmp.mp4")
         dur_corte = max(1.8, round(trim_end - trim_start, 3))
+        from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
         cmd = [
-            "ffmpeg",
+            encontrar_ffmpeg_bin(),
             "-y",
             "-loglevel",
             "error",
@@ -481,12 +483,7 @@ def tesoura_cirurgica_3_passes(
             str(video_path),
             "-t",
             f"{dur_corte:.3f}",
-            "-c:v",
-            "h264_nvenc",
-            "-preset",
-            "p1",
-            "-b:v",
-            "6M",
+            *args_h264_hw(bitrate="5M", maxrate="6M", bufsize="8M", cq=20, fast=True),
             "-c:a",
             "aac",
             "-b:a",

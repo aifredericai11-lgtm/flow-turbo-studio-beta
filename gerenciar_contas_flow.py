@@ -43,28 +43,22 @@ from forja.flow_rpc_direto import (
     salvar_registro_contas_flow,
     usar_conta_flow,
 )
+from forja.hw_accel import (
+    disparar_chrome_persistente,
+    encontrar_chrome_bin,
+    pasta_perfil_flow,
+)
 
 
 def _encontrar_chrome_exe() -> str:
-    cands = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-    ]
-    for c in cands:
-        if os.path.exists(c):
-            return c
-    raise FileNotFoundError("chrome.exe não encontrado.")
+    return encontrar_chrome_bin()
 
 
 def _perfil_e_porta_do_slot(slot: int) -> tuple[int, str]:
     if slot < 1 or slot > 20:
         raise ValueError("Slot deve estar entre 1 e 20.")
     porta = 9224 + slot
-    if slot == 1:
-        prof = os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\FlowProfile")
-    else:
-        prof = os.path.expandvars(rf"%LOCALAPPDATA%\Google\Chrome\FlowProfile_{slot:02d}")
+    prof = str(pasta_perfil_flow(slot))
     return porta, prof
 
 
@@ -93,20 +87,14 @@ def abrir_slot_flow(slot: int, url_inicial: str = "") -> dict:
     if not url_inicial:
         url_inicial = "https://flow.google.com/"
 
-    exe = _encontrar_chrome_exe()
-    ext_path = str(EXT_DIR.resolve())
-    cmd_str = (
-        f'"{exe}" --remote-debugging-port={porta} --user-data-dir="{prof}" '
-        f'--disable-extensions-except="{ext_path}" --load-extension="{ext_path}" '
-        f'--disable-background-timer-throttling --disable-backgrounding-occluded-windows '
-        f'--disable-renderer-backgrounding --no-first-run --no-default-browser-check '
-        f'--window-size=1400,900 "{url_inicial}"'
+    pid = disparar_chrome_persistente(
+        porta=porta,
+        profile_dir=prof,
+        ext_dir=EXT_DIR,
+        url_inicial=url_inicial,
     )
-    from forja.geracao_flow import _disparar_wmi_process
-
-    pid = _disparar_wmi_process(cmd_str)
     time.sleep(3.2)
-    print(f"  [Slot {slot:02d} · :{porta}] Janela persistente aberta (PID WMI: {pid})! Perfil: {prof}")
+    print(f"  [Slot {slot:02d} · :{porta}] Janela persistente aberta ({sys.platform}, PID: {pid})! Perfil: {prof}")
     print(f"     -> Faça login Google nessa janela e abra/crie 1 projeto no Flow (`flow.google.com/project/...`)!")
     return {"slot": slot, "porta": porta, "profile_dir": prof, "url_inicial": url_inicial}
 

@@ -165,8 +165,11 @@ def aplicar_apoio_visual_variado(
             f"[v_shift][ov]overlay=x=(W-w)/2:y=760:enable='{enable_expr}'[vout]"
         )
 
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
     cmd_nvenc = [
-        "ffmpeg",
+        ff_bin,
         "-nostdin",
         "-y",
         "-loglevel",
@@ -186,14 +189,7 @@ def aplicar_apoio_visual_variado(
         "-map",
         "0:a",
         "-shortest",
-        "-c:v",
-        "h264_nvenc",
-        "-preset",
-        "p2",
-        "-cq",
-        str(crf),
-        "-pix_fmt",
-        "yuv420p",
+        *args_h264_hw(bitrate="4M", maxrate="5.5M", bufsize="7M", cq=crf),
         "-c:a",
         "copy",
         "-movflags",
@@ -202,7 +198,7 @@ def aplicar_apoio_visual_variado(
     ]
     if subprocess.run(cmd_nvenc).returncode != 0:
         cmd_cpu = [
-            "ffmpeg",
+            ff_bin,
             "-nostdin",
             "-y",
             "-loglevel",

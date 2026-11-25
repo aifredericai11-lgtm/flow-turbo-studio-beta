@@ -36,11 +36,14 @@ from forja.seletores_flow import (
     SELETORES_FLOW,
 )
 
-DEFAULT_CDP_PORT = 9222
+import sys
+from forja.hw_accel import encontrar_chrome_bin, pasta_perfil_flow
+
+DEFAULT_CDP_PORT = 9225
 DEFAULT_CDP_URL = f"http://127.0.0.1:{DEFAULT_CDP_PORT}"
-CHROME_FLOW_PROFILE_DIR = Path(os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\FlowProfile"))
-CHROME_FLOW_PROFILE_ULTRA1 = Path(os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\FlowProfile_Ultra1"))
-CHROME_FLOW_PROFILE_ULTRA2 = Path(os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\FlowProfile_Ultra2"))
+CHROME_FLOW_PROFILE_DIR = pasta_perfil_flow(1)
+CHROME_FLOW_PROFILE_ULTRA1 = pasta_perfil_flow(1)
+CHROME_FLOW_PROFILE_ULTRA2 = pasta_perfil_flow(2)
 CHROME_PROFILE_DIR = CHROME_FLOW_PROFILE_ULTRA1
 CHROME_PROFILE_DIR_ULTRA2 = CHROME_FLOW_PROFILE_ULTRA2
 FLOW_LANDING_URL = "https://labs.google/fx/pt/tools/flow"
@@ -48,23 +51,26 @@ FLOW_URL_BASE = FLOW_LANDING_URL
 
 
 def _encontrar_executavel_chrome() -> str:
-    candidatos = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-    ]
-    for c in candidatos:
-        if os.path.isfile(c):
-            return c
-    raise FileNotFoundError("Executável do Google Chrome não encontrado.")
+    return encontrar_chrome_bin()
 
 
 def _disparar_wmi_process(cmdline: str, cwd: str | None = None) -> int | None:
     """
-    Inicia um processo fora da Job Object do terminal via WMI (Win32_Process.Create),
-    garantindo que janelas do Chrome com --remote-debugging-port abram na sessão interativa
-    do usuário e permaneçam vivas mesmo após o término do comando atual.
+    Inicia um processo desanexado no Windows (via WMI) ou no macOS/Linux (`start_new_session=True`).
     """
+    if sys.platform != "win32":
+        import shlex
+
+        proc_u = subprocess.Popen(
+            shlex.split(cmdline),
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True,
+        )
+        return proc_u.pid
     cmd_escaped = cmdline.replace("'", "''")
     if cwd:
         cwd_escaped = cwd.replace("'", "''")
@@ -97,11 +103,8 @@ def _disparar_wmi_process(cmdline: str, cwd: str | None = None) -> int | None:
 
 
 def _iniciar_auto_aprovacao_dialogo_cdp() -> None:
-    """
-    No Chrome 136+ com User Data padrão (DevToolsActivePort via chrome://inspect/#remote-debugging),
-    o navegador exibe um modal nativo 'Allow remote debugging?' ao receber conexão WebSocket.
-    Esta thread auxiliar localiza e clica automaticamente em 'Allow'/'Permitir' via UIAutomation em < 0.8s.
-    """
+    if sys.platform != "win32":
+        return
     import ctypes
     from ctypes import wintypes
     import threading
@@ -219,8 +222,16 @@ def cdp_esta_ativo(porta: int = DEFAULT_CDP_PORT, timeout_s: float = 2.0) -> boo
 def fechar_apenas_chrome_automacao(porta: int = DEFAULT_CDP_PORT, logger: BatchLogger | None = None) -> int:
     """
     Fecha SOMENTE os processos do Chrome que foram iniciados com --remote-debugging-port=<porta>,
-    preservando qualquer outro Chrome aberto pelo usuário.
+    preservando qualquer outro Chrome aberto pelo usuário (Windows / MacBook / Linux).
     """
+    if sys.platform != "win32":
+        proc_u = subprocess.run(
+            ["pkill", "-f", f"--remote-debugging-port={porta}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return 1 if proc_u.returncode == 0 else 0
     ps_cmd = (
         f"Get-CimInstance Win32_Process -Filter \"Name = 'chrome.exe'\" | "
         f"Where-Object {{ $_.CommandLine -match '--remote-debugging-port={porta}' }} | "

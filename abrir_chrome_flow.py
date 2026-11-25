@@ -93,6 +93,7 @@ def garantir_chrome_flow_aberto(port: int = CDP_PORT, url_inicial: str = FLOW_HO
         "--disable-background-timer-throttling",
         "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
+        "--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling",
         "--window-size=1440,900",
         url_inicial,
     ]

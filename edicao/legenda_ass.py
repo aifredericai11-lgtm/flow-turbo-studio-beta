@@ -298,8 +298,11 @@ def queimar_legenda_ass(
     else:
         filtro_vf = f"ass='{ass_esc}'"
 
-    cmd_nvenc = [
-        "ffmpeg",
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
+    cmd_hw = [
+        ff_bin,
         "-nostdin",
         "-y",
         "-loglevel",
@@ -308,25 +311,16 @@ def queimar_legenda_ass(
         str(video_entrada),
         "-vf",
         filtro_vf,
-        "-c:v",
-        "h264_nvenc",
-        "-preset",
-        "p2",
-        "-rc",
-        "vbr",
-        "-cq",
-        str(crf),
-        "-pix_fmt",
-        "yuv420p",
+        *args_h264_hw(bitrate="4M", maxrate="5.5M", bufsize="7M", cq=crf),
         "-c:a",
         "copy",
         "-movflags",
         "+faststart",
         str(video_saida),
     ]
-    if subprocess.run(cmd_nvenc).returncode != 0:
+    if subprocess.run(cmd_hw).returncode != 0:
         cmd_cpu = [
-            "ffmpeg",
+            ff_bin,
             "-nostdin",
             "-y",
             "-loglevel",

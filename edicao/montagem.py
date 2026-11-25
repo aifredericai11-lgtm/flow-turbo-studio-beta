@@ -145,8 +145,10 @@ def montar_video(
             v_prev = v_next
             a_prev = a_next
 
-    cmd_nvenc = [
-        "ffmpeg",
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin, encontrar_ffprobe_bin
+
+    cmd_hw = [
+        encontrar_ffmpeg_bin(),
         "-nostdin",
         "-y",
         "-loglevel",
@@ -158,16 +160,7 @@ def montar_video(
         "[vout]",
         "-map",
         "[aout]",
-        "-c:v",
-        "h264_nvenc",
-        "-preset",
-        "p2",
-        "-rc",
-        "vbr",
-        "-cq",
-        str(crf),
-        "-pix_fmt",
-        "yuv420p",
+        *args_h264_hw(bitrate="4M", maxrate="5.5M", bufsize="7M", cq=crf),
         "-c:a",
         "aac",
         "-b:a",
@@ -178,9 +171,9 @@ def montar_video(
         "+faststart",
         str(destino_mp4),
     ]
-    if subprocess.run(cmd_nvenc).returncode != 0:
+    if subprocess.run(cmd_hw).returncode != 0:
         cmd_cpu = [
-            "ffmpeg",
+            encontrar_ffmpeg_bin(),
             "-nostdin",
             "-y",
             "-loglevel",
@@ -216,7 +209,7 @@ def montar_video(
     probe_out = json.loads(
         subprocess.check_output(
             [
-                "ffprobe",
+                encontrar_ffprobe_bin(),
                 "-v",
                 "error",
                 "-show_format",

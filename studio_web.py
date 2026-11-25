@@ -581,16 +581,20 @@ def _carregar_dados_zerum() -> dict[str, Any]:
                 }
             )
 
+    from forja.hw_accel import resumo_hardware_local
+
+    gpu_label, cpu_label = resumo_hardware_local()
     return {
+        "ok": True,
         "personas": personas,
         "virais": virais,
         "viraisMp4Disco": virais_mp4_disco,
         "videos": videos_prontos,
         "lotes": lotes,
         "motorInfo": {
-            "buildZerumClonado": "20261024T1400-estagios24-783315d + Patch 15:33 (F5)",
-            "gpu": "NVIDIA GeForce RTX 4050 (h264_nvenc + Whisper CUDA)",
-            "cpu": "AMD Ryzen 7 7735HS (16 Threads)",
+            "buildZerumClonado": "20261024T1400-estagios24-783315d + Patch 15:33 (F5) + Dual-OS MacBook/Win",
+            "gpu": gpu_label,
+            "cpu": cpu_label,
             "cdpFlow": "http://127.0.0.1:9225 (Failover Automático Multi-Conta Anti-INCOMUM)",
             "cerebroAntigravity": "agy:gemini-3.8-flash-low (Conectado via ⚙)",
             "compilador": "forja/compilador_realismo_zerum.py (quadroPrompt18 + quadroRefs18 Dual-Ref + montador c2 Frase #1 + CTA LAW + estagios24)",
@@ -641,11 +645,13 @@ def _renderizar_editor_legenda_nvenc(payload: dict[str, Any]) -> dict[str, Any]:
     out_name = f"{src_mp4.stem}_editado_nvenc.mp4" if guardar_anterior else f"{src_mp4.stem}_tmp_nvenc.mp4"
     out_mp4 = src_mp4.with_name(out_name)
 
+    from forja.hw_accel import args_h264_hw, detectar_encoder_h264, encontrar_ffmpeg_bin
+
     # Caminho relativo no filtro subtitles/ass + fontsdir local
     fonts_rel = os.path.relpath(ROOT_DIR / "fonts", src_mp4.parent).replace("\\", "/")
     proc = subprocess.run(
         [
-            "ffmpeg",
+            encontrar_ffmpeg_bin(),
             "-y",
             "-loglevel",
             "error",
@@ -653,12 +659,7 @@ def _renderizar_editor_legenda_nvenc(payload: dict[str, Any]) -> dict[str, Any]:
             src_mp4.name,
             "-vf",
             f"ass={ass_path.name}:fontsdir={fonts_rel}",
-            "-c:v",
-            "h264_nvenc",
-            "-preset",
-            "p4",
-            "-b:v",
-            "6M",
+            *args_h264_hw(bitrate="5M", maxrate="6.5M", bufsize="8M", cq=21),
             "-c:a",
             "copy",
             out_mp4.name,
@@ -668,7 +669,7 @@ def _renderizar_editor_legenda_nvenc(payload: dict[str, Any]) -> dict[str, Any]:
         text=True,
     )
     if proc.returncode != 0 or not out_mp4.exists():
-        return {"ok": False, "erro": f"Falha FFmpeg NVENC: {proc.stderr[-300:]}"}
+        return {"ok": False, "erro": f"Falha FFmpeg ({detectar_encoder_h264()}): {proc.stderr[-300:]}"}
 
     if not guardar_anterior:
         shutil.move(str(out_mp4), str(src_mp4))
@@ -685,7 +686,7 @@ def _renderizar_editor_legenda_nvenc(payload: dict[str, Any]) -> dict[str, Any]:
         "arquivoSaida": str(final_mp4),
         "assPath": str(ass_path),
         "tempoMs": dt_ms,
-        "mensagem": f"Queimado via GPU RTX 4050 (h264_nvenc) em {dt_ms}ms · Estilo={estilo.upper()} · {blocos} pal/bloco · Cor={cor_ativa} + Botão COMMENT {palavra_cta}",
+        "mensagem": f"Queimado via {detectar_encoder_h264()} em {dt_ms}ms · Estilo={estilo.upper()} · {blocos} pal/bloco · Cor={cor_ativa} + Botão COMMENT {palavra_cta}",
     }
 
 
@@ -703,6 +704,11 @@ def _montar_video_final_nvenc(
     - Por padrão (`edicao_dinamica=True`), aplica progressão de escala humana (Cena 1 em 1.0x -> Cena 2 com Punch-In 1.10x -> Cena 3 com enquadramento íntimo de CTA) + presença de áudio (-14.2 dB LUFS).
     - Se `estilo_legenda="apenas_cta"` (sem legenda nas falas, apenas botão CTA no final), omite legendas faladas e exibe só o botão CTA!
     """
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
+    hw_v = args_h264_hw(bitrate="5M", maxrate="6.5M", bufsize="8M", cq=21)
+    hw_v_fast = args_h264_hw(bitrate="5M", maxrate="6.5M", bufsize="8M", cq=22, fast=True)
     clipes_para_concat: list[Path] = []
     total_clipes = len(clipes)
     for idx_c, c_path in enumerate(clipes):
@@ -712,7 +718,7 @@ def _montar_video_final_nvenc(
             clean_cta_path = pasta_job / f"{c_path.stem}_clean_cta.mp4"
             subprocess.run(
                 [
-                    "ffmpeg",
+                    ff_bin,
                     "-y",
                     "-loglevel",
                     "error",
@@ -720,12 +726,7 @@ def _montar_video_final_nvenc(
                     c_path.name,
                     "-vf",
                     "crop=iw*0.88:ih*0.84:iw*0.06:ih*0.06,scale=720:1280",
-                    "-c:v",
-                    "h264_nvenc",
-                    "-preset",
-                    "p4",
-                    "-b:v",
-                    "6M",
+                    *hw_v,
                     "-c:a",
                     "copy",
                     clean_cta_path.name,
@@ -738,7 +739,7 @@ def _montar_video_final_nvenc(
             punch_path = pasta_job / f"{c_path.stem}_punch.mp4"
             subprocess.run(
                 [
-                    "ffmpeg",
+                    ff_bin,
                     "-y",
                     "-loglevel",
                     "error",
@@ -746,12 +747,7 @@ def _montar_video_final_nvenc(
                     c_path.name,
                     "-vf",
                     "crop=iw*0.90:ih*0.90:iw*0.05:ih*0.04,scale=720:1280",
-                    "-c:v",
-                    "h264_nvenc",
-                    "-preset",
-                    "p4",
-                    "-b:v",
-                    "6M",
+                    *hw_v,
                     "-c:a",
                     "copy",
                     punch_path.name,
@@ -766,10 +762,9 @@ def _montar_video_final_nvenc(
     concat_txt = pasta_job / "concat_list.txt"
     concat_txt.write_text("\n".join(f"file '{c.name}'" for c in clipes_para_concat), encoding="utf-8")
     joined_mp4 = pasta_job / f"{titulo_id}_joined.mp4"
-    # Concat instantâneo (-c copy em 0.05s) com fallback para h264_nvenc p1
     r_copy = subprocess.run(
         [
-            "ffmpeg",
+            ff_bin,
             "-y",
             "-loglevel",
             "error",
@@ -789,7 +784,7 @@ def _montar_video_final_nvenc(
     if r_copy.returncode != 0 or not joined_mp4.exists() or joined_mp4.stat().st_size < 10000:
         subprocess.run(
             [
-                "ffmpeg",
+                ff_bin,
                 "-y",
                 "-loglevel",
                 "error",
@@ -799,12 +794,7 @@ def _montar_video_final_nvenc(
                 "0",
                 "-i",
                 concat_txt.name,
-                "-c:v",
-                "h264_nvenc",
-                "-preset",
-                "p1",
-                "-b:v",
-                "6M",
+                *hw_v_fast,
                 "-c:a",
                 "aac",
                 "-b:a",
@@ -833,7 +823,7 @@ def _montar_video_final_nvenc(
     fonts_rel = os.path.relpath(ROOT_DIR / "fonts", pasta_job).replace("\\", "/")
     subprocess.run(
         [
-            "ffmpeg",
+            ff_bin,
             "-y",
             "-loglevel",
             "error",
@@ -843,12 +833,7 @@ def _montar_video_final_nvenc(
             f"ass={ass_file.name}:fontsdir={fonts_rel}",
             "-af",
             "volume=2.2dB,alimiter=limit=0.96",
-            "-c:v",
-            "h264_nvenc",
-            "-preset",
-            "p1",
-            "-b:v",
-            "6M",
+            *hw_v_fast,
             "-c:a",
             "aac",
             "-b:a",

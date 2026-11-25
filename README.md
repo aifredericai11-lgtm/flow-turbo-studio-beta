@@ -44,33 +44,40 @@ Motor autônomo de alta concorrência para dissecação de vídeos virais, clona
 
 ---
 
-## ⚡ Como Iniciar (1 Conta ou Pool Multi-Contas)
+## ⚡ Como Iniciar no Windows (RTX NVENC) ou MacBook (Apple Silicon M1–M5 VideoToolbox)
+
+O motor detecta automaticamente o sistema operacional (`forja/hw_accel.py`):
+- **MacBook (M1 / M2 / M3 / M4 / M5 & Intel):** usa aceleração de hardware nativa **`h264_videotoolbox`** + `faster-whisper` (`int8` multi-core) + `caffeinate -dimsu` anti-sono + perfis isolados em `~/Library/Application Support/Google/Chrome/FlowProfile*`.
+- **Windows (NVIDIA RTX):** usa **`h264_nvenc`** + `faster-whisper` (`CUDA float16`) + perfis isolados em `%LOCALAPPDATA%\Google\Chrome\FlowProfile*`.
 
 ### Passo 1 — Instalar Dependências
-- **Windows:** `1_INSTALAR_DEPENDENCIAS.bat` (ou `pip install -r requirements.txt`)
-- **MacBook / Linux:** `pip3 install -r requirements.txt`
+- **Windows:** dê dois cliques em `1_INSTALAR_DEPENDENCIAS.bat` (ou `pip install -r requirements.txt`)
+- **MacBook:** dê dois cliques em **`1_INSTALAR_DEPENDENCIAS_MAC.command`** (ou no Terminal: `chmod +x *.command && ./1_INSTALAR_DEPENDENCIAS_MAC.command`)
 
 ### Passo 2 — Abrir 1 Conta (`:9225`) ou Pool Multi-Contas (`:9225..:9236`)
 - **Para 1 conta principal (`:9225`):**
   - Windows: `2_ABRIR_CHROME_FLOW.bat` (ou `python abrir_chrome_flow.py`)
-  - MacBook: `python3 abrir_chrome_flow.py`
+  - MacBook: **`2_ABRIR_CHROME_FLOW_MAC.command`** (ou `python3 abrir_chrome_flow.py`)
 - **Para Pool Multi-Contas (`:9225`, `:9226`, `:9227`, ...):**
   - Windows: dê dois cliques em **`GERENCIAR_CONTAS_FLOW.bat`**
-  - Terminal (Windows/Mac):
+  - MacBook: dê dois cliques em **`GERENCIAR_CONTAS_FLOW_MAC.command`**
+  - Terminal (Windows / MacBook):
     ```bash
-    # Abrir slots 1, 2, 3 e 4 (:9225 a :9228) para login:
-    python gerenciar_contas_flow.py --abrir 1 2 3 4
+    # Abrir slots 1 e 2 (:9225 e :9226) em janelas isoladas para login:
+    python3 gerenciar_contas_flow.py --abrir 1 2
 
     # Verificar status, e-mail, projeto e saldo de créditos de todas as contas:
-    python gerenciar_contas_flow.py --status
+    python3 gerenciar_contas_flow.py --status
 
     # Reabrir automaticamente todas as contas salvas no pool:
-    python gerenciar_contas_flow.py --subir-todas
+    python3 gerenciar_contas_flow.py --subir-todas
     ```
-  - Em cada janela aberta, faça login no Google Flow e deixe aberta dentro de um projeto (`https://flow.google.com/project/<ID>`).
+  - Em cada janela aberta, faça login numa conta **Google AI Ultra** e deixe aberta dentro de um projeto (`https://flow.google.com/project/<ID>`).
 
 ### Passo 3 — Usar o Studio Web ou a API Python UltraBatch
-- **Interface Web:** `3_INICIAR_STUDIO_BETA.bat` ou `python studio_web.py` (`http://localhost:8788`)
+- **Interface Web:**
+  - Windows: `3_INICIAR_STUDIO_BETA.bat` (`http://localhost:8788`)
+  - MacBook: **`3_INICIAR_STUDIO_BETA_MAC.command`** *(já sobe com `caffeinate -dimsu` para o Mac não dormir nos lotes!)*
 - **Exemplo em Python (UltraBatch 1-Token + Multi-Contas Automático):**
   ```python
   from forja.flow_rpc_direto import (

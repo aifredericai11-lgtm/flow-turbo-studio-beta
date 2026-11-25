@@ -201,8 +201,11 @@ def aplicar_cta_ultimo_take(
         f"[0:v][1:v]overlay=x=(W-w)/2:y='{expr_y}':enable='between(t,{t0},{duracao + 0.5:.3f})'[vout]"
     )
 
-    cmd_nvenc = [
-        "ffmpeg",
+    from forja.hw_accel import args_h264_hw, encontrar_ffmpeg_bin
+
+    ff_bin = encontrar_ffmpeg_bin()
+    cmd_hw = [
+        ff_bin,
         "-nostdin",
         "-y",
         "-loglevel",
@@ -217,25 +220,16 @@ def aplicar_cta_ultimo_take(
         "[vout]",
         "-map",
         "0:a?",
-        "-c:v",
-        "h264_nvenc",
-        "-preset",
-        "p2",
-        "-rc",
-        "vbr",
-        "-cq",
-        str(crf),
-        "-pix_fmt",
-        "yuv420p",
+        *args_h264_hw(bitrate="4M", maxrate="5.5M", bufsize="7M", cq=crf),
         "-c:a",
         "copy",
         "-movflags",
         "+faststart",
         str(video_saida),
     ]
-    if subprocess.run(cmd_nvenc).returncode != 0:
+    if subprocess.run(cmd_hw).returncode != 0:
         cmd_cpu = [
-            "ffmpeg",
+            ff_bin,
             "-nostdin",
             "-y",
             "-loglevel",
