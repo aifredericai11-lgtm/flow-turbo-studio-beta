@@ -80,7 +80,7 @@ def _testar_encoder_ffmpeg(encoder: str) -> bool:
                 "-f",
                 "lavfi",
                 "-i",
-                "color=c=black:s=128x128:d=0.1",
+                "color=c=black:s=256x256:d=0.1",
                 "-frames:v",
                 "1",
                 "-c:v",
