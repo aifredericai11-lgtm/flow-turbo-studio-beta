@@ -1449,25 +1449,27 @@ def _executar_job_producao_flow(job_id: str, payload: dict[str, Any]) -> None:
             except Exception as e_drv:
                 hub_status_txt += f" · ⚠️ Drive ({e_drv})"
 
-            # 2) Sempre enviar via HTTP para o Servidor Hub Central de Orgânico na LAN (:3000)
-            try:
-                import urllib.request
-                upload_url = f"http://192.168.100.126:3000/api/formats/{fmt_id_num}/upload-raw"
-                req_hub = urllib.request.Request(
-                    upload_url,
-                    data=final_mp4.read_bytes(),
-                    headers={
-                        "Content-Type": "video/mp4",
-                        "x-filename": urllib.parse.quote(final_mp4.name),
-                        "x-subfolder": "LOTE 01",
-                    },
-                    method="POST",
-                )
-                with urllib.request.urlopen(req_hub, timeout=45) as r_hub:
-                    r_hub.read()
-                hub_status_txt += f" · 📤 LAN Hub ({formato_hub} -> LOTE 01)"
-            except Exception as e_hub:
-                hub_status_txt += f" · ⚠️ Aviso LAN ({formato_hub}): {e_hub}"
+            # 2) Envio opcional via HTTP para Hub LAN somente se FLOW_HUB_UPLOAD_URL estiver definido no .env
+            hub_base_env = os.environ.get("FLOW_HUB_UPLOAD_URL", "").strip().rstrip("/")
+            if hub_base_env:
+                try:
+                    import urllib.request
+                    upload_url = f"{hub_base_env}/api/formats/{fmt_id_num}/upload-raw"
+                    req_hub = urllib.request.Request(
+                        upload_url,
+                        data=final_mp4.read_bytes(),
+                        headers={
+                            "Content-Type": "video/mp4",
+                            "x-filename": urllib.parse.quote(final_mp4.name),
+                            "x-subfolder": "LOTE 01",
+                        },
+                        method="POST",
+                    )
+                    with urllib.request.urlopen(req_hub, timeout=45) as r_hub:
+                        r_hub.read()
+                    hub_status_txt += f" · 📤 LAN Hub ({formato_hub} -> LOTE 01)"
+                except Exception as e_hub:
+                    hub_status_txt += f" · ⚠️ Aviso LAN ({formato_hub}): {e_hub}"
 
         job["status"] = "concluido"
         job["videoFinalUrl"] = "/media/root/" + final_mp4.relative_to(ROOT_DIR).as_posix()
