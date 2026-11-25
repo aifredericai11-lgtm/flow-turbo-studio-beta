@@ -399,8 +399,8 @@ class CacheVideoForja:
 def selecionar_aba_flow_por_perfil_isolado(browser: Any, porta_cdp: int, project_url: str | None = None) -> Any:
     """
     Seleciona a aba do Google Flow garantindo ESTRITAMENTE 1 Janela/Perfil de Chrome (browserContextId + SID) por conta:
-    - Porta 9222 (Ultra 1 - deepeniateam@gmail.com): Janela Perfil Default (browserContextId 13353C... / SID g.a000Dwkcla)
-    - Porta 9223 (Ultra 2 - aifredericai11@gmail.com): Janela Profile 3 separada (browserContextId 0894A8... / SID g.a000DwnZsD)
+    - Porta 9222 (Ultra 1): Janela Perfil Default
+    - Porta 9223 (Ultra 2): Janela Profile 3 separada
     - Jamais seleciona abas /u/1/ e jamais compartilha o mesmo browserContextId entre 9222 e 9223.
     """
     abas_flow = [
@@ -436,10 +436,16 @@ def selecionar_aba_flow_por_perfil_isolado(browser: Any, porta_cdp: int, project
             pass
         infos.append((p, bctx, sid))
 
+    sid_u2 = os.environ.get("FLOW_ULTRA2_SID_PREFIX", "").strip()
+    bctx_u2 = os.environ.get("FLOW_ULTRA2_BCTX", "").strip()
+    sid_u1 = os.environ.get("FLOW_ULTRA1_SID_PREFIX", "").strip()
+    bctx_u1 = os.environ.get("FLOW_ULTRA1_BCTX", "").strip()
+
     if porta_cdp == 9223:
-        for p, bctx, sid in infos:
-            if bctx == "0894A85691C9B72CE2018200BBCAEB19" or sid.startswith("g.a000DwnZsD"):
-                return p
+        if bctx_u2 or sid_u2:
+            for p, bctx, sid in infos:
+                if (bctx_u2 and bctx == bctx_u2) or (sid_u2 and sid.startswith(sid_u2)):
+                    return p
         bctxs_distintos = []
         for _, bctx, _ in infos:
             if bctx not in bctxs_distintos:
@@ -449,11 +455,12 @@ def selecionar_aba_flow_por_perfil_isolado(browser: Any, porta_cdp: int, project
             for p, bctx, _ in infos:
                 if bctx == alvo_bctx:
                     return p
-        return None
+        return infos[0][0] if len(infos) == 1 else None
 
-    for p, bctx, sid in infos:
-        if bctx == "13353C96E1D8C5B9876BAAE1847497FA" or sid.startswith("g.a000Dwkcla"):
-            return p
+    if bctx_u1 or sid_u1:
+        for p, bctx, sid in infos:
+            if (bctx_u1 and bctx == bctx_u1) or (sid_u1 and sid.startswith(sid_u1)):
+                return p
     return infos[0][0]
 
 

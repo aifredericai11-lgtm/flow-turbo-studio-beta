@@ -85,7 +85,7 @@ def garantir_chrome_flow_aberto(port: int = CDP_PORT, url_inicial: str = FLOW_HO
         exe,
         f"--remote-debugging-port={port}",
         "--remote-debugging-address=127.0.0.1",
-        "--remote-allow-origins=http://127.0.0.1:8788,http://localhost:8788",
+        f"--remote-allow-origins=http://127.0.0.1:{port},http://localhost:{port},http://127.0.0.1:8788,http://localhost:8788",
         f"--user-data-dir={perfil}",
         f"--disable-extensions-except={ext_str}",
         f"--load-extension={ext_str}",

@@ -255,7 +255,7 @@ def disparar_chrome_persistente(
         exe,
         f"--remote-debugging-port={porta}",
         "--remote-debugging-address=127.0.0.1",
-        "--remote-allow-origins=http://127.0.0.1:8788,http://localhost:8788",
+        f"--remote-allow-origins=http://127.0.0.1:{porta},http://localhost:{porta},http://127.0.0.1:8788,http://localhost:8788",
         f"--user-data-dir={prof_str}",
         f"--disable-extensions-except={ext_str}",
         f"--load-extension={ext_str}",

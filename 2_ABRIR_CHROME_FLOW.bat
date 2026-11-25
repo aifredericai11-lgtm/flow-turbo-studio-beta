@@ -6,4 +6,4 @@ set PROFILE_DIR=%~dp0chrome_flow_profile
 if not exist "%PROFILE_DIR%" mkdir "%PROFILE_DIR%"
 echo Iniciando Google Chrome com extensao Flow RPC na porta 9225...
 echo Faca login na sua conta Google em https://flow.google.com/ e abra ou crie qualquer projeto (/project/ID).
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9225 --remote-debugging-address=127.0.0.1 --remote-allow-origins=http://127.0.0.1:8788,http://localhost:8788 --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --user-data-dir="%PROFILE_DIR%" --load-extension="%EXT_DIR%" "https://flow.google.com/"
+start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9225 --remote-debugging-address=127.0.0.1 --remote-allow-origins=http://127.0.0.1:9225,http://localhost:9225,http://127.0.0.1:8788,http://localhost:8788 --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --user-data-dir="%PROFILE_DIR%" --load-extension="%EXT_DIR%" "https://flow.google.com/"

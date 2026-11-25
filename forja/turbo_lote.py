@@ -934,7 +934,7 @@ def executar_lote_turbo_paralelo(
                 logger.log(f"Aviso no Vigia background da macro-onda {idx_macro}: {e_bg}", nivel="WARN")
 
         ids_aprovados_onda = [e_item["video_id"] for e_item in entregues_lista if any(p["video_id"] == e_item["video_id"] for p in grupo_pvs)]
-        if os.environ.get("FORJA_OFFLOAD_PEACHCLUB", "1") != "0" and ids_aprovados_onda:
+        if os.environ.get("FORJA_OFFLOAD_PEACHCLUB", "0") == "1" and ids_aprovados_onda:
             try:
                 from forja.rclone_offload import descarregar_onda_para_peachclub
                 descarregar_onda_para_peachclub(

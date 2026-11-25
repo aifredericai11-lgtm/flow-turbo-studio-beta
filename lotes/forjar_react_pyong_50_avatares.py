@@ -44,7 +44,7 @@ cv2.setNumThreads(1)
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = pathlib.Path(r"c:\Users\JeffP\OneDrive\Área de Trabalho\Nova pasta")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRATCH = ROOT / "scratch"
 for p_s in (str(ROOT), str(SCRATCH)):
     if p_s not in sys.path:
@@ -77,14 +77,15 @@ from motor_turbo_lote20_core import (
     WHISPER_LOCK,
 )
 
-RCLONE_DIR = pathlib.Path(r"H:\Meu Drive\HUB CENTRAL OP ORGÂNICO\07_REACT_RCLONE")
-MAT_DIR = pathlib.Path(r"C:\Hub001\MATRIZES_VIRAIS_1611\react_pyong_50")
+_HUB_BASE = pathlib.Path(r"C:\Hub001") if sys.platform == "win32" and pathlib.Path(r"C:\Hub001").exists() else (ROOT / "_react_data")
+RCLONE_DIR = pathlib.Path(os.environ.get("REACT_RCLONE_DIR", str(_HUB_BASE / "07_REACT_RCLONE")))
+MAT_DIR = _HUB_BASE / "MATRIZES_VIRAIS_1611" / "react_pyong_50"
 MAT_DIR.mkdir(parents=True, exist_ok=True)
 
-AVATARS_BANK_DIR = pathlib.Path(r"C:\Hub001\AVATARES_ISOLADOS_REACT_105_V3")
+AVATARS_BANK_DIR = _HUB_BASE / "AVATARES_ISOLADOS_REACT_105_V3"
 AVATARS_BANK_DIR.mkdir(parents=True, exist_ok=True)
 
-ESTEIRA_REACT_BASE = pathlib.Path(r"C:\Hub001\VIDEOS_ESTEIRA_TREE\US\WL\REACT\C01\G00")
+ESTEIRA_REACT_BASE = _HUB_BASE / "VIDEOS_ESTEIRA_TREE" / "US" / "WL" / "REACT" / "C01" / "G00"
 ESTEIRA_REACT_BASE.mkdir(parents=True, exist_ok=True)
 
 TODAY_STR = f"{datetime.now():%Y-%m-%d}"
@@ -341,9 +342,7 @@ def _carregar_ou_gerar_catalogo_105() -> dict[str, dict[str, Any]]:
         except Exception:
             pass
 
-    txt_path = pathlib.Path(
-        r"C:\Users\JeffP\.gemini\antigravity\brain\8ae8cf2b-5a24-4020-9cf1-2816b2435e39\.system_generated\steps\16831\output.txt"
-    )
+    txt_path = MAT_DIR / "rclone_105_transcricoes.txt"
     catalogo: dict[str, dict[str, Any]] = {}
     if txt_path.exists():
         raw = txt_path.read_text(encoding="utf-8", errors="replace")
@@ -873,7 +872,7 @@ def montar_video_react_pyong_nvenc(
                 shutil.copy2(str(esteira_dst), str(dst))
         return {"ok": True, "idx": vid_idx, "path": str(esteira_dst), "cached": True}
 
-    wdir = pathlib.Path(r"C:\Hub001\WORK_REACT_PYONG_105_V2") / f"R{vid_idx:03d}_AV{av_num:03d}"
+    wdir = (_HUB_BASE / "WORK_REACT_PYONG_105_V2") / f"R{vid_idx:03d}_AV{av_num:03d}"
     wdir.mkdir(parents=True, exist_ok=True)
 
     c1_hook = pathlib.Path(av_info["c1"])

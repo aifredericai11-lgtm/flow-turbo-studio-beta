@@ -3183,12 +3183,21 @@ class NossoZerumHandler(BaseHTTPRequestHandler):
         if path.startswith("/media/"):
             rel = urllib.parse.unquote(path[len("/media/"):])
             if rel.startswith("artifact/"):
-                fname = rel[len("artifact/"):]
-                fpath = Path(r"C:\Users\JeffP\.gemini\antigravity\brain\8ae8cf2b-5a24-4020-9cf1-2816b2435e39\.user_uploaded") / fname
+                fname = Path(rel[len("artifact/"):]).name
+                fpath = ROOT_DIR / "virais" / fname
             elif rel.startswith("root/"):
                 fpath = ROOT_DIR / rel[len("root/"):]
             else:
                 fpath = ROOT_DIR / rel
+
+            try:
+                fpath_res = fpath.resolve()
+                if not fpath_res.is_relative_to(ROOT_DIR.resolve()):
+                    self.send_error(403, "Forbidden")
+                    return
+            except Exception:
+                self.send_error(400, "Bad path")
+                return
 
             if fpath.exists() and fpath.is_file():
                 mime, _ = mimetypes.guess_type(str(fpath))
